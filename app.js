@@ -36,22 +36,6 @@ function saveToStorage() {
     JSON.stringify(stocks.map(s => ({ symbol: s.symbol, name: s.name, exchange: s.exchange }))));
 }
 
-// Otomatik temettü listemiz (boş başlar, Worker'dan dolar)
-let BIST_DIVIDENDS = {};
-
-async function fetchBistDividends() {
-  // Zaten çektiysek tekrar sunucuyu yorma
-  if (Object.keys(BIST_DIVIDENDS).length > 0) return;
-  try {
-    const res = await fetch(WORKER_URL + '/api/bist-dividends');
-    if (res.ok) {
-      BIST_DIVIDENDS = await res.json();
-      console.log('[Temettü] Otomatik veriler yüklendi: ' + Object.keys(BIST_DIVIDENDS).length + ' hisse');
-    }
-  } catch (e) {
-    console.warn('[Temettü] Çekim başarısız:', e);
-  }
-}
 
 // ── FMP yardimci ──
 function parseFmpDiv(q) {
