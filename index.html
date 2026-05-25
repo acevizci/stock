@@ -421,16 +421,24 @@ if ('Notification' in window && Notification.permission === 'granted') notifOn =
 // ── CORS proxy listesi (Farklı davranış türlerine sahip) ──
 const PROXIES = [
   {
-    type: 'json-contents', // AllOrigins veriyi "contents" adında bir string içinde yollar
-    url: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`
-  },
-  {
-    type: 'raw', // CodeTabs doğrudan Yahoo'nun orjinal verisini yollar
+    type: 'raw', 
+    // codetabs is currently one of the more reliable public proxies
     url: u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
   },
   {
-    type: 'raw', // Corsproxy doğrudan orjinal veriyi yollar
+    type: 'raw',
+    // thingproxy is a great alternative fallback
+    url: u => `https://thingproxy.freeboard.io/fetch/${u}`
+  },
+  {
+    type: 'raw', 
+    // corsproxy.io as a third fallback
     url: u => `https://corsproxy.io/?${encodeURIComponent(u)}`
+  },
+  {
+    type: 'json-contents', 
+    // Push allorigins to the bottom since it is currently returning 500/522 errors
+    url: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`
   }
 ];
 
