@@ -1,37 +1,31 @@
 // ── Hisse Listeleri ──
+// Boş başlar — FMP'den veya localStorage cache'ten dolar.
+// Boş kalıyorsa FMP bağlantısı çalışmıyor demektir.
 
-// Son çare — screener ve localStorage ikisi de boşsa bunlar gösterilir
-const BIST_EMERGENCY = [
-  {s:'THYAO',n:'Türk Hava Yolları',div:0},{s:'GARAN',n:'Garanti BBVA',div:0},
-  {s:'ASELS',n:'Aselsan',div:0},{s:'SISE',n:'Şişe Cam',div:0},
-  {s:'EREGL',n:'Ereğli Demir Çelik',div:0},{s:'BIMAS',n:'BİM Mağazaları',div:0},
-  {s:'KCHOL',n:'Koç Holding',div:0},{s:'SAHOL',n:'Sabancı Holding',div:0},
-  {s:'AKBNK',n:'Akbank',div:0},{s:'YKBNK',n:'Yapı Kredi',div:0},
-  {s:'ISCTR',n:'İş Bankası C',div:0},{s:'HALKB',n:'Halkbank',div:0},
-  {s:'VAKBN',n:'Vakıfbank',div:0},{s:'FROTO',n:'Ford Otosan',div:0},
-  {s:'TOASO',n:'Tofaş',div:0},{s:'TUPRS',n:'Tüpraş',div:0},
-  {s:'TCELL',n:'Turkcell',div:0},{s:'PGSUS',n:'Pegasus',div:0},
-  {s:'TAVHL',n:'TAV Havalimanları',div:0},{s:'EKGYO',n:'Emlak Konut GYO',div:0},
-  {s:'ENKAI',n:'Enka İnşaat',div:0},{s:'PETKM',n:'Petkim',div:0},
-  {s:'ARCLK',n:'Arçelik',div:0},{s:'MGROS',n:'Migros Ticaret',div:0},
-  {s:'SOKM',n:'Şok Marketler',div:0},{s:'KOZAL',n:'Koza Altın',div:0},
-  {s:'MAVI',n:'Mavi Giyim',div:0},{s:'LOGO',n:'Logo Yazılım',div:0},
-  {s:'ULKER',n:'Ülker Bisküvi',div:0},{s:'ODAS',n:'Odaş Elektrik',div:0},
-  {s:'AEFES',n:'Anadolu Efes',div:0},{s:'TTKOM',n:'Türk Telekom',div:0},
-  {s:'TTRAK',n:'Türk Traktör',div:0},{s:'SASA',n:'Sasa Polyester',div:0},
-  {s:'DOHOL',n:'Doğan Holding',div:0},
-];
-
-// Dinamik BIST listesi — önce localStorage'dan yüklenir, sonra screener günceller
 let BIST_LIST = (() => {
   try {
     const cached = JSON.parse(localStorage.getItem('bist_list') || '[]');
-    // Eski format kontrolü: div alanı yoksa temizle, screener yeniden çeksin
     if (cached.length >= 5 && 'div' in cached[0]) return cached;
     localStorage.removeItem('bist_list');
     sessionStorage.removeItem('bist_list_fetched');
-    return BIST_EMERGENCY;
-  } catch (_) { return BIST_EMERGENCY; }
+  } catch (_) {}
+  return [];
+})();
+
+// Exchange kodu → borsa adı
+const EXCH_MAP = {
+  NMS:'NASDAQ', NasdaqGS:'NASDAQ', NasdaqGM:'NASDAQ', NasdaqCM:'NASDAQ',
+  NYQ:'NYSE', NYSE:'NYSE', PCX:'NYSE',
+};
+
+let INTL_LIST = (() => {
+  try {
+    const cached = JSON.parse(localStorage.getItem('intl_list') || '[]');
+    if (cached.length >= 5 && 'div' in cached[0]) return cached;
+    localStorage.removeItem('intl_list');
+    sessionStorage.removeItem('intl_list_fetched');
+  } catch (_) {}
+  return [];
 })();
 
 /**
@@ -85,29 +79,8 @@ async function fetchBistList() {
   }
 }
 // ── Uluslararası hisse listesi (dinamik) ──
-const INTL_EMERGENCY = [
-  {s:'AAPL',n:'Apple',x:'NASDAQ'},{s:'MSFT',n:'Microsoft',x:'NASDAQ'},
-  {s:'NVDA',n:'NVIDIA',x:'NASDAQ'},{s:'GOOGL',n:'Alphabet',x:'NASDAQ'},
-  {s:'AMZN',n:'Amazon',x:'NASDAQ'},{s:'JPM',n:'JPMorgan Chase',x:'NYSE'},
-  {s:'META',n:'Meta Platforms',x:'NASDAQ'},{s:'XOM',n:'ExxonMobil',x:'NYSE'},
-];
-
-// Exchange kodu → borsa adı eşlemesi
-const EXCH_MAP = {
-  NMS:'NASDAQ', NasdaqGS:'NASDAQ', NasdaqGM:'NASDAQ', NasdaqCM:'NASDAQ',
-  NYQ:'NYSE', NYSE:'NYSE', PCX:'NYSE',
-};
-
-let INTL_LIST = (() => {
-  try {
-    const cached = JSON.parse(localStorage.getItem('intl_list') || '[]');
-    // Eski format kontrolü
-    if (cached.length >= 5 && 'div' in cached[0]) return cached;
-    localStorage.removeItem('intl_list');
-    sessionStorage.removeItem('intl_list_fetched');
-    return INTL_EMERGENCY;
-  } catch (_) { return INTL_EMERGENCY; }
-})();
+// FMP farklı alan adları kullanabiliyor — hepsini dene
+function parseFmpDiv(q) {
 
 async function fetchIntlList() {
   if (sessionStorage.getItem('intl_list_fetched') === '1') return;
@@ -536,20 +509,24 @@ function toggleDivFilter() {
 
 function filterList() {
   const q   = document.getElementById('search-inp').value.toLowerCase().trim();
-  let raw   = curTab === 'bist' ? BIST_LIST.map(x => ({...x, x:'BIST'})) : INTL_LIST;
+  const raw = curTab === 'bist' ? BIST_LIST.map(x => ({...x, x:'BIST'})) : INTL_LIST;
+  let filtered = showOnlyDiv ? raw.filter(x => (x.div || 0) > 0) : raw;
+  filtered = q ? filtered.filter(x => x.s.toLowerCase().includes(q) || x.n.toLowerCase().includes(q)) : filtered;
 
-  // Temettü filtresi
-  if (showOnlyDiv) raw = raw.filter(x => (x.div || 0) > 0);
-
-  const list = q ? raw.filter(x => x.s.toLowerCase().includes(q) || x.n.toLowerCase().includes(q)) : raw;
-  const el   = document.getElementById('s-list');
+  const el = document.getElementById('s-list');
   el.innerHTML = '';
 
-  if (!list.length) {
-    el.innerHTML = `<div style="padding:18px;text-align:center;font-size:12px;color:var(--muted)">${showOnlyDiv ? 'Temettü verisi olan hisse bulunamadı' : 'Sonuç bulunamadı'}</div>`;
+  if (!filtered.length) {
+    const listEmpty = raw.length === 0;
+    el.innerHTML = `<div style="padding:22px;text-align:center;font-size:12px;color:var(--muted)">
+      ${listEmpty
+        ? '<i class="ti ti-loader" style="animation:spin 1.2s linear infinite;display:inline-block;font-size:20px;margin-bottom:8px"></i><br>Liste yükleniyor...'
+        : showOnlyDiv ? 'Temettü verisi olan hisse bulunamadı' : 'Sonuç bulunamadı'}
+    </div>`;
     return;
   }
-  list.forEach(item => {
+
+  filtered.forEach(item => {
     const added   = !!stocks.find(s => s.symbol === item.s);
     const divPct  = item.div > 0 ? `<span class="s-div">${(item.div * 100).toFixed(1)}%</span>` : '';
     const div     = document.createElement('div');
