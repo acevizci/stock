@@ -106,7 +106,7 @@ async function fetchBistList() {
 // ── Veri cekme ──
 async function fetchStockPrice(symbol, exchange) {
   const ticker = exchange === 'BIST' ? symbol + '.IS' : symbol;
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1wk&range=1y';
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1d&range=1y';
   const data   = await fetchWithFallback(url);
   const result = data?.chart?.result?.[0];
   if (!result) throw new Error('Sembol bulunamadi');
