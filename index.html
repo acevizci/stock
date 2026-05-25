@@ -418,33 +418,51 @@ let curTab = 'bist', notifOn = false, toastT = null;
 
 if ('Notification' in window && Notification.permission === 'granted') notifOn = true;
 
-// ── CORS proxy listesi — sırayla denenir, çalışan ilki kullanılır ──
+// ── CORS proxy listesi (Farklı davranış türlerine sahip) ──
 const PROXIES = [
-  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  u => `https://thingproxy.freeboard.io/fetch/${u}`,
-  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  {
+    type: 'json-contents', // AllOrigins veriyi "contents" adında bir string içinde yollar
+    url: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`
+  },
+  {
+    type: 'raw', // CodeTabs doğrudan Yahoo'nun orjinal verisini yollar
+    url: u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  },
+  {
+    type: 'raw', // Corsproxy doğrudan orjinal veriyi yollar
+    url: u => `https://corsproxy.io/?${encodeURIComponent(u)}`
+  }
 ];
 
 async function fetchWithFallback(targetUrl) {
-  try {
-    const res = await fetch(PROXIES[0](targetUrl));
-    const data = await res.json();
+  // Proxy'leri sırayla dene
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy.url(targetUrl));
+      if (!res.ok) continue; // Sunucu yanıt vermezse diğerine geç
 
-    // AllOrigins /get endpoint'i veriyi contents içinde string olarak döner
-    if (data && data.contents) {
-      const parsedYahooData = JSON.parse(data.contents);
+      let parsedYahooData;
       
-      // Yahoo response doğrulaması
-      if (parsedYahooData?.chart?.result?.[0]) {
-        return parsedYahooData;
+      if (proxy.type === 'json-contents') {
+        const data = await res.json();
+        if (!data || !data.contents) continue;
+        parsedYahooData = JSON.parse(data.contents);
+      } else {
+        parsedYahooData = await res.json();
       }
+      
+      // Gelen veri gerçekten Yahoo formatında mı kontrol et
+      if (parsedYahooData?.chart?.result?.[0]) {
+        return parsedYahooData; // Doğru veriyi bulursan döngüden çık ve döndür
+      }
+    } catch (error) {
+      // JSON parse hatası (HTML gelmesi vs.) olursa sessizce diğer proxy'yi dene
+      continue;
     }
-    throw new Error('Geçersiz veri formatı');
-  } catch (error) {
-    console.error("Proxy çekim hatası:", error);
-    throw new Error('Veri alınamadı');
   }
+  
+  // Hiçbir proxy başarılı olamazsa tek bir hata fırlat
+  throw new Error('Veri alınamadı');
 }
 
 // ── Veri çekme ──
