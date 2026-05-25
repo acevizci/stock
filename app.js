@@ -36,6 +36,23 @@ function saveToStorage() {
     JSON.stringify(stocks.map(s => ({ symbol: s.symbol, name: s.name, exchange: s.exchange }))));
 }
 
+// Otomatik temettü listemiz (boş başlar, Worker'dan dolar)
+let BIST_DIVIDENDS = {};
+
+async function fetchBistDividends() {
+  // Zaten çektiysek tekrar sunucuyu yorma
+  if (Object.keys(BIST_DIVIDENDS).length > 0) return;
+  try {
+    const res = await fetch(WORKER_URL + '/api/bist-dividends');
+    if (res.ok) {
+      BIST_DIVIDENDS = await res.json();
+      console.log('[Temettü] Otomatik veriler yüklendi: ' + Object.keys(BIST_DIVIDENDS).length + ' hisse');
+    }
+  } catch (e) {
+    console.warn('[Temettü] Çekim başarısız:', e);
+  }
+}
+
 // ── FMP yardimci ──
 function parseFmpDiv(q) {
   const y = q.dividendYield || q.lastAnnualDividendYield || 0;
@@ -45,27 +62,30 @@ function parseFmpDiv(q) {
   return amt > 0 && p > 0 ? amt / p : 0;
 }
 
+// Otomatik temettü listemiz (boş başlar, Worker'dan dolar)
+let BIST_DIVIDENDS = {};
+
+async function fetchBistDividends() {
+  // Zaten çektiysek tekrar sunucuyu yorma
+  if (Object.keys(BIST_DIVIDENDS).length > 0) return;
+  try {
+    const res = await fetch(WORKER_URL + '/api/bist-dividends');
+    if (res.ok) {
+      BIST_DIVIDENDS = await res.json();
+      console.log('[Temettü] Otomatik veriler yüklendi: ' + Object.keys(BIST_DIVIDENDS).length + ' hisse');
+    }
+  } catch (e) {
+    console.warn('[Temettü] Çekim başarısız:', e);
+  }
+}
+
 async function fetchBistList() {
   if (sessionStorage.getItem('bist_list_fetched') === '1') return;
   try {
-    // BIST Temettü Şampiyonları (Oranlar güncel veya tahmini ortalamalardır)
-    // İstediğin zaman bu listeye yeni hisseler ve oranlar (örneğin %10 için 0.10) ekleyebilirsin.
-    const BIST_DIVIDENDS = {
-      'DOAS':  0.12,
-      'TUPRS': 0.10,
-      'FROTO': 0.09,
-      'TTRAK': 0.08,
-      'ENJSA': 0.07,
-      'ISMEN': 0.07,
-      'AKSA':  0.06,
-      'VESBE': 0.06,
-      'AYGAZ': 0.05,
-      'TOASO': 0.05,
-      'KCHOL': 0.04,
-      'SAHOL': 0.04,
-      'SISE':  0.03
-    };
+    // 1. FMP'den hisse listesini getirmeden önce güncel temettü oranlarını bekle
+    await fetchBistDividends();
 
+    // 2. FMP hisselerini indir
     const res = await fetch(WORKER_URL + '/fmp/search-symbol?query=.IS', { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     
@@ -81,7 +101,7 @@ async function fetchBistList() {
         return { 
           s: sym, 
           n: q.companyName || q.name, 
-          // FMP'den temettü gelmediği için bizim sözlükten eşleştiriyoruz
+          // 3. Worker'dan canlı çekilen listeden oranı bul, yoksa sıfır yaz
           div: BIST_DIVIDENDS[sym] || 0 
         };
       });
@@ -140,6 +160,16 @@ async function fetchStockPrice(symbol, exchange) {
       .filter(d => d.date > oneYrAgo)
       .reduce((sum, d) => sum + (d.amount || 0), 0);
     if (annual > 0 && price > 0) dividendYield = annual / price;
+  }
+
+  // YENİ EKLENEN KISIM: Yahoo temettü bilgisini bulamadıysa, Worker'dan gelen canlı veriyi kullan
+  if (!dividendYield && exchange === 'BIST') {
+    if (Object.keys(BIST_DIVIDENDS).length === 0) {
+      await fetchBistDividends(); // Eğer sözlük henüz dolmadıysa hemen çek
+    }
+    if (BIST_DIVIDENDS[symbol]) {
+      dividendYield = BIST_DIVIDENDS[symbol];
+    }
   }
 
   return {
