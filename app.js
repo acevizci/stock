@@ -62,8 +62,8 @@ function parseFmpDiv(q) {
 async function fetchBistList() {
   if (sessionStorage.getItem('bist_list_fetched') === '1') return;
   try {
-    const res = await fetch(WORKER_URL + '/fmp/stock-screener?exchange=IST&limit=500',
-      { signal: AbortSignal.timeout(12000) });
+    const res = await fetch(WORKER_URL + '/fmp/search-symbol?query=.IS', 
+	{ signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const raw  = await res.json();
     const data = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
@@ -86,8 +86,8 @@ async function fetchBistList() {
 async function fetchIntlList() {
   if (sessionStorage.getItem('intl_list_fetched') === '1') return;
   try {
-    const res = await fetch(WORKER_URL + '/fmp/stock-screener?exchange=NASDAQ,NYSE&limit=500',
-      { signal: AbortSignal.timeout(12000) });
+    const res = await fetch(WORKER_URL + '/fmp/search-symbol?query=NASDAQ', 
+	{ signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const raw  = await res.json();
     const data = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
