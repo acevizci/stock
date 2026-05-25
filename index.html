@@ -421,7 +421,7 @@ if ('Notification' in window && Notification.permission === 'granted') notifOn =
 // ── Proxy ──
 // Worker'ı deploy ettikten sonra aşağıdaki URL'i kendi worker adresinle değiştir.
 // Örnek: 'https://stock-proxy.senkullanicin.workers.dev'
-const WORKER_URL = 'https://stock-proxy.burcufidan51.workers.dev/';
+const WORKER_URL = 'https://stock-proxy.burcufidan51.workers.dev';
 
 async function fetchWithFallback(targetUrl) {
   const proxyUrl = WORKER_URL + new URL(targetUrl).pathname + new URL(targetUrl).search;
