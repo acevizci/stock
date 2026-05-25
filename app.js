@@ -2,8 +2,24 @@
 
 // Son çare — screener ve localStorage ikisi de boşsa bunlar gösterilir
 const BIST_EMERGENCY = [
-  {s:'THYAO',n:'Türk Hava Yolları'},{s:'GARAN',n:'Garanti BBVA'},
-  {s:'ASELS',n:'Aselsan'},{s:'SISE',n:'Şişe Cam'},{s:'KCHOL',n:'Koç Holding'},
+  {s:'THYAO',n:'Türk Hava Yolları',div:0},{s:'GARAN',n:'Garanti BBVA',div:0},
+  {s:'ASELS',n:'Aselsan',div:0},{s:'SISE',n:'Şişe Cam',div:0},
+  {s:'EREGL',n:'Ereğli Demir Çelik',div:0},{s:'BIMAS',n:'BİM Mağazaları',div:0},
+  {s:'KCHOL',n:'Koç Holding',div:0},{s:'SAHOL',n:'Sabancı Holding',div:0},
+  {s:'AKBNK',n:'Akbank',div:0},{s:'YKBNK',n:'Yapı Kredi',div:0},
+  {s:'ISCTR',n:'İş Bankası C',div:0},{s:'HALKB',n:'Halkbank',div:0},
+  {s:'VAKBN',n:'Vakıfbank',div:0},{s:'FROTO',n:'Ford Otosan',div:0},
+  {s:'TOASO',n:'Tofaş',div:0},{s:'TUPRS',n:'Tüpraş',div:0},
+  {s:'TCELL',n:'Turkcell',div:0},{s:'PGSUS',n:'Pegasus',div:0},
+  {s:'TAVHL',n:'TAV Havalimanları',div:0},{s:'EKGYO',n:'Emlak Konut GYO',div:0},
+  {s:'ENKAI',n:'Enka İnşaat',div:0},{s:'PETKM',n:'Petkim',div:0},
+  {s:'ARCLK',n:'Arçelik',div:0},{s:'MGROS',n:'Migros Ticaret',div:0},
+  {s:'SOKM',n:'Şok Marketler',div:0},{s:'KOZAL',n:'Koza Altın',div:0},
+  {s:'MAVI',n:'Mavi Giyim',div:0},{s:'LOGO',n:'Logo Yazılım',div:0},
+  {s:'ULKER',n:'Ülker Bisküvi',div:0},{s:'ODAS',n:'Odaş Elektrik',div:0},
+  {s:'AEFES',n:'Anadolu Efes',div:0},{s:'TTKOM',n:'Türk Telekom',div:0},
+  {s:'TTRAK',n:'Türk Traktör',div:0},{s:'SASA',n:'Sasa Polyester',div:0},
+  {s:'DOHOL',n:'Doğan Holding',div:0},
 ];
 
 // Dinamik BIST listesi — önce localStorage'dan yüklenir, sonra screener günceller
@@ -27,45 +43,36 @@ let BIST_LIST = (() => {
 async function fetchBistList() {
   if (sessionStorage.getItem('bist_list_fetched') === '1') return;
 
-  // POST screener auth gerektiriyor — GET predefined screener kullan
-  const screenerUrl = WORKER_URL
-    + '/v1/finance/screener/predefined/saved'
-    + '?count=150&scrIds=most_actives&region=TR&lang=tr-TR';
-
   try {
-    const res = await fetch(screenerUrl, {
-      signal: AbortSignal.timeout(10000),
-    });
+    // FMP → IST borsasındaki tüm aktif hisseler, piyasa değerine göre
+    const url = WORKER_URL + '/fmp/stock-screener?exchange=IST&limit=300&isActivelyTrading=true';
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
 
-    const data   = await res.json();
-    const quotes = data?.finance?.result?.[0]?.quotes;
-    if (!quotes?.length) throw new Error('Boş liste');
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 5) throw new Error('Yetersiz sonuç');
 
-    const list = quotes
-      .filter(q => q.symbol && q.shortName)
+    const list = data
+      .filter(q => q.symbol && q.companyName)
+      .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
       .map(q => ({
         s:   q.symbol.replace(/\.IS$/i, ''),
-        n:   q.shortName,
-        div: q.trailingAnnualDividendYield
-          || q.dividendYield
-          || (q.trailingAnnualDividendRate && q.regularMarketPrice
-              ? q.trailingAnnualDividendRate / q.regularMarketPrice
-              : 0)
-          || 0,
+        n:   q.companyName,
+        // FMP lastAnnualDividend miktar verir — yield hesapla
+        div: q.lastAnnualDividend > 0 && q.price > 0
+          ? q.lastAnnualDividend / q.price
+          : 0,
       }));
-
-    if (list.length < 5) throw new Error('Yetersiz sonuç');
 
     BIST_LIST = list;
     localStorage.setItem('bist_list', JSON.stringify(list));
     sessionStorage.setItem('bist_list_fetched', '1');
     filterList();
-    console.log(`[Hisse] BIST listesi güncellendi: ${list.length} hisse`);
+    console.log(`[Hisse] BIST listesi FMP'den güncellendi: ${list.length} hisse`);
 
   } catch (err) {
-    console.warn('[Hisse] BIST screener başarısız:', err.message,
-      BIST_LIST === BIST_EMERGENCY ? '→ acil liste kullanılıyor' : '→ önbellek kullanılıyor');
+    console.warn('[Hisse] BIST FMP başarısız:', err.message,
+      BIST_LIST === BIST_EMERGENCY ? '→ acil liste' : '→ önbellek');
   }
 }
 // ── Uluslararası hisse listesi (dinamik) ──
@@ -96,45 +103,35 @@ let INTL_LIST = (() => {
 async function fetchIntlList() {
   if (sessionStorage.getItem('intl_list_fetched') === '1') return;
 
-  // POST screener auth gerektiriyor — GET predefined screener kullan
-  const screenerUrl = WORKER_URL
-    + '/v1/finance/screener/predefined/saved'
-    + '?count=150&scrIds=most_actives&region=US&lang=en-US';
-
   try {
-    const res = await fetch(screenerUrl, {
-      signal: AbortSignal.timeout(10000),
-    });
+    // FMP → NASDAQ + NYSE, piyasa değerine göre top 300
+    const url = WORKER_URL + '/fmp/stock-screener?exchange=NASDAQ,NYSE&limit=300&isActivelyTrading=true&country=US';
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
 
-    const data   = await res.json();
-    const quotes = data?.finance?.result?.[0]?.quotes;
-    if (!quotes?.length) throw new Error('Boş liste');
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 5) throw new Error('Yetersiz sonuç');
 
-    const list = quotes
-      .filter(q => q.symbol && q.shortName && !q.symbol.includes('.'))
+    const list = data
+      .filter(q => q.symbol && q.companyName && !q.symbol.includes('.'))
+      .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
       .map(q => ({
         s:   q.symbol,
-        n:   q.shortName,
-        x:   EXCH_MAP[q.exchange] || 'NASDAQ',
-        div: q.trailingAnnualDividendYield
-          || q.dividendYield
-          || (q.trailingAnnualDividendRate && q.regularMarketPrice
-              ? q.trailingAnnualDividendRate / q.regularMarketPrice
-              : 0)
-          || 0,
+        n:   q.companyName,
+        x:   q.exchangeShortName === 'NYSE' ? 'NYSE' : 'NASDAQ',
+        div: q.lastAnnualDividend > 0 && q.price > 0
+          ? q.lastAnnualDividend / q.price
+          : 0,
       }));
-
-    if (list.length < 5) throw new Error('Yetersiz sonuç');
 
     INTL_LIST = list;
     localStorage.setItem('intl_list', JSON.stringify(list));
     sessionStorage.setItem('intl_list_fetched', '1');
     filterList();
-    console.log(`[Hisse] INTL listesi güncellendi: ${list.length} hisse`);
+    console.log(`[Hisse] INTL listesi FMP'den güncellendi: ${list.length} hisse`);
 
   } catch (err) {
-    console.warn('[Hisse] INTL screener başarısız:', err.message,
+    console.warn('[Hisse] INTL FMP başarısız:', err.message,
       INTL_LIST === INTL_EMERGENCY ? '→ acil liste' : '→ önbellek');
   }
 }
@@ -191,12 +188,24 @@ async function fetchStockPrice(symbol, exchange) {
     volume: volumes[volumes.length - 2],
   } : null;
 
-  const dividendYield = meta.dividendYield
-    || meta.trailingAnnualDividendYield
-    || 0;
-  const dividendRate  = meta.dividendRate
-    || meta.trailingAnnualDividendRate
-    || 0;
+  // Temettü verisi — meta alanını dene, yoksa chart events'ten hesapla
+  const metaYield = meta.dividendYield || meta.trailingAnnualDividendYield || 0;
+  const metaRate  = meta.dividendRate  || meta.trailingAnnualDividendRate  || 0;
+
+  let dividendYield = metaYield
+    || (metaRate > 0 && price > 0 ? metaRate / price : 0);
+
+  // Yahoo BIST için meta'yı doldurmayabiliyor — events.dividends'tan hesapla
+  if (!dividendYield) {
+    const evDivs    = result.events?.dividends || {};
+    const oneYrAgo  = Date.now() / 1000 - 365 * 24 * 3600;
+    const annualDiv = Object.values(evDivs)
+      .filter(d => d.date > oneYrAgo)
+      .reduce((sum, d) => sum + (d.amount || 0), 0);
+    if (annualDiv > 0 && price > 0) dividendYield = annualDiv / price;
+  }
+
+  const dividendRate = metaRate || (dividendYield * price) || 0;
 
   return {
     price, change, changePct,
