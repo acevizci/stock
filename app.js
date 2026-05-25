@@ -40,29 +40,38 @@ let BIST_LIST = (() => {
  * Başarılı sonuç localStorage'a kaydedilir (kalıcı cache).
  * sessionStorage ile aynı oturumda tekrar istek atılmaz.
  */
+// FMP farklı alan adları kullanabiliyor — hepsini dene
+function parseFmpDiv(q) {
+  const yield_ = q.dividendYield || q.lastAnnualDividendYield || 0;
+  if (yield_ > 0) return yield_ > 1 ? yield_ / 100 : yield_; // bazen % olarak gelir
+  const amount = q.lastAnnualDividend || q.annualDividend || 0;
+  const price  = q.price || q.regularMarketPrice || 0;
+  return amount > 0 && price > 0 ? amount / price : 0;
+}
+
 async function fetchBistList() {
   if (sessionStorage.getItem('bist_list_fetched') === '1') return;
 
   try {
-    // FMP → IST borsasındaki tüm aktif hisseler, piyasa değerine göre
-    const url = WORKER_URL + '/fmp/stock-screener?exchange=IST&limit=300&isActivelyTrading=true';
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const url = WORKER_URL + '/fmp/stock-screener?exchange=IST&limit=500';
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
 
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length < 5) throw new Error('Yetersiz sonuç');
+    const raw  = await res.json();
+    // FMP bazen { stockList: [...] } bazen direkt [] döner
+    const data = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
+    if (data.length < 5) throw new Error(`Yetersiz sonuç: ${data.length}`);
 
     const list = data
-      .filter(q => q.symbol && q.companyName)
+      .filter(q => q.symbol && (q.companyName || q.name))
       .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
       .map(q => ({
         s:   q.symbol.replace(/\.IS$/i, ''),
-        n:   q.companyName,
-        // FMP lastAnnualDividend miktar verir — yield hesapla
-        div: q.lastAnnualDividend > 0 && q.price > 0
-          ? q.lastAnnualDividend / q.price
-          : 0,
+        n:   q.companyName || q.name,
+        div: parseFmpDiv(q),
       }));
+
+    if (list.length < 5) throw new Error('Parse sonrası yetersiz');
 
     BIST_LIST = list;
     localStorage.setItem('bist_list', JSON.stringify(list));
@@ -72,7 +81,7 @@ async function fetchBistList() {
 
   } catch (err) {
     console.warn('[Hisse] BIST FMP başarısız:', err.message,
-      BIST_LIST === BIST_EMERGENCY ? '→ acil liste' : '→ önbellek');
+      '→', BIST_LIST === BIST_EMERGENCY ? 'acil liste' : 'önbellek');
   }
 }
 // ── Uluslararası hisse listesi (dinamik) ──
@@ -104,25 +113,25 @@ async function fetchIntlList() {
   if (sessionStorage.getItem('intl_list_fetched') === '1') return;
 
   try {
-    // FMP → NASDAQ + NYSE, piyasa değerine göre top 300
-    const url = WORKER_URL + '/fmp/stock-screener?exchange=NASDAQ,NYSE&limit=300&isActivelyTrading=true&country=US';
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const url = WORKER_URL + '/fmp/stock-screener?exchange=NASDAQ,NYSE&limit=500';
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
 
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length < 5) throw new Error('Yetersiz sonuç');
+    const raw  = await res.json();
+    const data = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
+    if (data.length < 5) throw new Error(`Yetersiz sonuç: ${data.length}`);
 
     const list = data
-      .filter(q => q.symbol && q.companyName && !q.symbol.includes('.'))
+      .filter(q => q.symbol && (q.companyName || q.name) && !q.symbol.includes('.'))
       .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
       .map(q => ({
         s:   q.symbol,
-        n:   q.companyName,
+        n:   q.companyName || q.name,
         x:   q.exchangeShortName === 'NYSE' ? 'NYSE' : 'NASDAQ',
-        div: q.lastAnnualDividend > 0 && q.price > 0
-          ? q.lastAnnualDividend / q.price
-          : 0,
+        div: parseFmpDiv(q),
       }));
+
+    if (list.length < 5) throw new Error('Parse sonrası yetersiz');
 
     INTL_LIST = list;
     localStorage.setItem('intl_list', JSON.stringify(list));
@@ -132,7 +141,7 @@ async function fetchIntlList() {
 
   } catch (err) {
     console.warn('[Hisse] INTL FMP başarısız:', err.message,
-      INTL_LIST === INTL_EMERGENCY ? '→ acil liste' : '→ önbellek');
+      '→', INTL_LIST === INTL_EMERGENCY ? 'acil liste' : 'önbellek');
   }
 }
 
@@ -162,7 +171,7 @@ function saveToStorage() {
 // ── Veri çekme ──
 async function fetchStockPrice(symbol, exchange) {
   const ticker = exchange === 'BIST' ? symbol + '.IS' : symbol;
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1wk&range=1y`;
   const data = await fetchWithFallback(url);
   const result = data?.chart?.result?.[0];
   if (!result) throw new Error('Sembol bulunamadı');
