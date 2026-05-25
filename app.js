@@ -25,31 +25,15 @@ let BIST_LIST = (() => {
  * sessionStorage ile aynı oturumda tekrar istek atılmaz.
  */
 async function fetchBistList() {
-  // Aynı oturumda zaten çekildiyse tekrar atma
   if (sessionStorage.getItem('bist_list_fetched') === '1') return;
 
-  const screenerUrl = WORKER_URL + '/v1/finance/screener?lang=tr-TR&region=TR';
-  const body = JSON.stringify({
-    offset: 0,
-    size: 150,
-    sortField: 'intradaymarketcap',
-    sortType: 'DESC',
-    quoteType: 'EQUITY',
-    topOperator: 'AND',
-    query: {
-      operator: 'AND',
-      operands: [
-        { operator: 'eq', operands: ['exchange', 'IST'] },
-        { operator: 'eq', operands: ['region',   'tr'] },
-      ],
-    },
-    userId: '', userIdType: 'guid',
-  });
+  // POST screener auth gerektiriyor — GET predefined screener kullan
+  const screenerUrl = WORKER_URL
+    + '/v1/finance/screener/predefined/saved'
+    + '?count=150&scrIds=most_actives&region=TR&lang=tr-TR';
 
   try {
     const res = await fetch(screenerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -63,7 +47,6 @@ async function fetchBistList() {
       .map(q => ({
         s:   q.symbol.replace(/\.IS$/i, ''),
         n:   q.shortName,
-        // Yahoo farklı alan adları kullanabiliyor — hepsini dene
         div: q.trailingAnnualDividendYield
           || q.dividendYield
           || (q.trailingAnnualDividendRate && q.regularMarketPrice
@@ -74,7 +57,6 @@ async function fetchBistList() {
 
     if (list.length < 5) throw new Error('Yetersiz sonuç');
 
-    // Güncelle — hem bellek hem kalıcı cache
     BIST_LIST = list;
     localStorage.setItem('bist_list', JSON.stringify(list));
     sessionStorage.setItem('bist_list_fetched', '1');
@@ -82,7 +64,6 @@ async function fetchBistList() {
     console.log(`[Hisse] BIST listesi güncellendi: ${list.length} hisse`);
 
   } catch (err) {
-    // localStorage cache varsa zaten yüklenmiş durumda, sadece logla
     console.warn('[Hisse] BIST screener başarısız:', err.message,
       BIST_LIST === BIST_EMERGENCY ? '→ acil liste kullanılıyor' : '→ önbellek kullanılıyor');
   }
@@ -115,22 +96,13 @@ let INTL_LIST = (() => {
 async function fetchIntlList() {
   if (sessionStorage.getItem('intl_list_fetched') === '1') return;
 
-  const screenerUrl = WORKER_URL + '/v1/finance/screener?lang=en-US&region=US';
-  const body = JSON.stringify({
-    offset: 0, size: 150,
-    sortField: 'intradaymarketcap', sortType: 'DESC',
-    quoteType: 'EQUITY', topOperator: 'AND',
-    query: {
-      operator: 'AND',
-      operands: [{ operator: 'eq', operands: ['region', 'us'] }],
-    },
-    userId: '', userIdType: 'guid',
-  });
+  // POST screener auth gerektiriyor — GET predefined screener kullan
+  const screenerUrl = WORKER_URL
+    + '/v1/finance/screener/predefined/saved'
+    + '?count=150&scrIds=most_actives&region=US&lang=en-US';
 
   try {
     const res = await fetch(screenerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
