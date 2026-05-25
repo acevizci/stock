@@ -804,7 +804,7 @@ function addManual() {
 document.getElementById('m-sym').addEventListener('keydown', e => { if (e.key === 'Enter') addManual(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-// ── Başlat ──
+/// ── Başlat ──
 updateBellUI();
 filterList();
 
@@ -820,6 +820,16 @@ if (savedStocks) {
     console.error("Kayıtlı veriler yüklenirken hata oluştu:", e);
   }
 }
+
+// ── OTOMATİK YENİLEME (EKLENEN KISIM) ──
+// Sayfa açık olduğu sürece her 30 saniyede bir (30000 ms) hisseleri otomatik günceller
+setInterval(() => {
+  // Eğer kullanıcı o esnada yeni hisse ekleme modalını açtıysa aramayı bölmemek için yenileme yapmaz
+  const isModalOpen = document.getElementById('overlay').classList.contains('open');
+  if (!isModalOpen) {
+    refreshAll();
+  }
+}, 30000); 
 
 // file:// protokolü uyarısı
 if (location.protocol === 'file:') {
