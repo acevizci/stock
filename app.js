@@ -48,17 +48,46 @@ function parseFmpDiv(q) {
 async function fetchBistList() {
   if (sessionStorage.getItem('bist_list_fetched') === '1') return;
   try {
-    const res = await fetch(WORKER_URL + '/fmp/search-symbol?query=.IS', 
-	{ signal: AbortSignal.timeout(12000) });
+    // BIST Temettü Şampiyonları (Oranlar güncel veya tahmini ortalamalardır)
+    // İstediğin zaman bu listeye yeni hisseler ve oranlar (örneğin %10 için 0.10) ekleyebilirsin.
+    const BIST_DIVIDENDS = {
+      'DOAS':  0.12,
+      'TUPRS': 0.10,
+      'FROTO': 0.09,
+      'TTRAK': 0.08,
+      'ENJSA': 0.07,
+      'ISMEN': 0.07,
+      'AKSA':  0.06,
+      'VESBE': 0.06,
+      'AYGAZ': 0.05,
+      'TOASO': 0.05,
+      'KCHOL': 0.04,
+      'SAHOL': 0.04,
+      'SISE':  0.03
+    };
+
+    const res = await fetch(WORKER_URL + '/fmp/search-symbol?query=.IS', { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    
     const raw  = await res.json();
     const data = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
+    
     if (data.length < 5) throw new Error('Yetersiz: ' + data.length);
+    
     const list = data
       .filter(q => q.symbol && (q.companyName || q.name))
-      .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-      .map(q => ({ s: q.symbol.replace(/\.IS$/i, ''), n: q.companyName || q.name, div: parseFmpDiv(q) }));
+      .map(q => {
+        let sym = q.symbol.replace(/\.IS$/i, '');
+        return { 
+          s: sym, 
+          n: q.companyName || q.name, 
+          // FMP'den temettü gelmediği için bizim sözlükten eşleştiriyoruz
+          div: BIST_DIVIDENDS[sym] || 0 
+        };
+      });
+
     if (list.length < 5) throw new Error('Parse sonrasi yetersiz');
+    
     BIST_LIST = list;
     localStorage.setItem('bist_list', JSON.stringify(list));
     sessionStorage.setItem('bist_list_fetched', '1');
