@@ -86,22 +86,30 @@ async function fetchBistList() {
 async function fetchIntlList() {
   if (sessionStorage.getItem('intl_list_fetched') === '1') return;
   try {
-    const res = await fetch(WORKER_URL + '/fmp/search-symbol?query=NASDAQ', 
-	{ signal: AbortSignal.timeout(12000) });
+    // FMP'nin tüm hisseleri veren genel listesine istek atıyoruz
+    const res = await fetch(WORKER_URL + '/fmp/stock/list', { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    
     const raw  = await res.json();
-    const data = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
+    const allStocks = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
+    
+    // Gelen devasa listeden sadece NASDAQ ve NYSE olanları filtreleyip ilk 500 tanesini alıyoruz
+    const data = allStocks
+      .filter(q => (q.exchangeShortName === 'NASDAQ' || q.exchangeShortName === 'NYSE') && q.symbol && !q.symbol.includes('.'))
+      .slice(0, 500);
+
     if (data.length < 5) throw new Error('Yetersiz: ' + data.length);
+    
     const list = data
-      .filter(q => q.symbol && (q.companyName || q.name) && !q.symbol.includes('.'))
-      .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
       .map(q => ({
         s: q.symbol,
-        n: q.companyName || q.name,
+        n: q.name || q.companyName || q.symbol,
         x: EXCH_MAP[q.exchangeShortName] || (q.exchangeShortName === 'NYSE' ? 'NYSE' : 'NASDAQ'),
-        div: parseFmpDiv(q),
+        div: 0 // Temel liste API'sinde temettü verisi genelde gelmez
       }));
+      
     if (list.length < 5) throw new Error('Parse sonrasi yetersiz');
+    
     INTL_LIST = list;
     localStorage.setItem('intl_list', JSON.stringify(list));
     sessionStorage.setItem('intl_list_fetched', '1');
