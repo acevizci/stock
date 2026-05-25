@@ -230,12 +230,22 @@ body {
 .chart-area { margin: 14px 0 10px; height: 58px; position: relative; }
 .sep { height: 1px; margin: 12px 0; background: linear-gradient(90deg, transparent, var(--border2), transparent); }
 .c-meta { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.m-col  { display: flex; flex-direction: column; gap: 3px; }
 .m-lbl {
   font-size: 9px; font-weight: 600; letter-spacing: .1em;
   text-transform: uppercase; color: var(--muted2);
-  font-family: var(--mono); margin-bottom: 5px;
+  font-family: var(--mono); margin-bottom: 4px;
 }
-.m-val { font-size: 12px; font-weight: 500; font-family: var(--mono); color: var(--text2); }
+.m-val  { font-size: 12px; font-weight: 500; font-family: var(--mono); color: var(--text2); }
+.m-prev {
+  font-size: 11px; color: var(--muted); position: relative; padding-left: 9px;
+}
+/* dün etiketi — sol çizgi */
+.m-prev::before {
+  content: ''; position: absolute; left: 0; top: 50%;
+  transform: translateY(-50%); width: 3px; height: 10px;
+  background: var(--border2); border-radius: 2px;
+}
 .skel-box { background: var(--surface3); border-radius: 6px; animation: skel 1.4s ease-in-out infinite; }
 
 /* ── Empty state ── */

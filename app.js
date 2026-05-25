@@ -119,17 +119,32 @@ async function fetchStockPrice(symbol, exchange) {
   const meta = result.meta;
   const price = meta.regularMarketPrice;
   if (!price) throw new Error('Fiyat alınamadı');
+
   const prev      = meta.chartPreviousClose || meta.previousClose || price;
   const change    = +(price - prev).toFixed(4);
   const changePct = +((change / prev) * 100).toFixed(4);
-  const rawCloses = result.indicators?.quote?.[0]?.close || [];
-  const closes    = rawCloses.filter(v => v != null);
+
+  // Günlük OHLCV dizileri — null'ları filtrele
+  const q       = result.indicators?.quote?.[0] || {};
+  const closes  = (q.close  || []).filter(v => v != null);
+  const highs   = (q.high   || []).filter(v => v != null);
+  const lows    = (q.low    || []).filter(v => v != null);
+  const volumes = (q.volume || []).filter(v => v != null);
+
+  // Dünün verisi (son kapalı gün)
+  const yesterday = highs.length >= 2 ? {
+    high:   highs[highs.length - 2],
+    low:    lows[lows.length   - 2],
+    volume: volumes[volumes.length - 2],
+  } : null;
+
   return {
     price, change, changePct,
-    high:     meta.regularMarketDayHigh || price,
-    low:      meta.regularMarketDayLow  || price,
-    volume:   meta.regularMarketVolume  || 0,
-    currency: meta.currency || (exchange === 'BIST' ? 'TRY' : 'USD'),
+    high:      meta.regularMarketDayHigh || highs[highs.length - 1] || price,
+    low:       meta.regularMarketDayLow  || lows[lows.length   - 1] || price,
+    volume:    meta.regularMarketVolume  || volumes[volumes.length - 1] || 0,
+    yesterday,
+    currency:  meta.currency || (exchange === 'BIST' ? 'TRY' : 'USD'),
     closes,
   };
 }
@@ -221,9 +236,21 @@ function makeSkeletonCard(sym, name, exch) {
     <div class="chart-area"><canvas id="cv-${sym}" aria-label="${sym} fiyat grafiği"></canvas></div>
     <div class="sep"></div>
     <div class="c-meta">
-      <div><div class="m-lbl">Yüksek</div><div class="m-val">—</div></div>
-      <div><div class="m-lbl">Düşük</div><div class="m-val">—</div></div>
-      <div><div class="m-lbl">Hacim</div><div class="m-val">—</div></div>
+      <div class="m-col">
+        <div class="m-lbl">Yüksek</div>
+        <div class="m-val" data-k="high-today">—</div>
+        <div class="m-val m-prev" data-k="high-prev">—</div>
+      </div>
+      <div class="m-col">
+        <div class="m-lbl">Düşük</div>
+        <div class="m-val" data-k="low-today">—</div>
+        <div class="m-val m-prev" data-k="low-prev">—</div>
+      </div>
+      <div class="m-col">
+        <div class="m-lbl">Hacim</div>
+        <div class="m-val" data-k="vol-today">—</div>
+        <div class="m-val m-prev" data-k="vol-prev">—</div>
+      </div>
     </div>`;
   return d;
 }
@@ -255,9 +282,19 @@ function updateCard(s, prevPrice) {
     badgeEl.className   = 'badge ' + D;
     badgeEl.onclick     = null;
   }
-  if (vals[0]) vals[0].textContent = fmt(d.high, d.currency);
-  if (vals[1]) vals[1].textContent = fmt(d.low,  d.currency);
-  if (vals[2]) vals[2].textContent = fmtVol(d.volume);
+
+  // Meta — bugün
+  const g = k => card.querySelector(`[data-k="${k}"]`);
+  if (g('high-today')) g('high-today').textContent = fmt(d.high,   d.currency);
+  if (g('low-today'))  g('low-today').textContent  = fmt(d.low,    d.currency);
+  if (g('vol-today'))  g('vol-today').textContent  = fmtVol(d.volume);
+
+  // Meta — dün (varsa)
+  if (d.yesterday) {
+    if (g('high-prev')) g('high-prev').textContent = fmt(d.yesterday.high,   d.currency);
+    if (g('low-prev'))  g('low-prev').textContent  = fmt(d.yesterday.low,    d.currency);
+    if (g('vol-prev'))  g('vol-prev').textContent  = fmtVol(d.yesterday.volume);
+  }
 
   // Grafik — gerçek Yahoo verisi
   const hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
