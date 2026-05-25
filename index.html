@@ -434,6 +434,11 @@ const PROXIES = [
   }
 ];
 
+function saveToStorage() {
+  const basicStocks = stocks.map(s => ({ symbol: s.symbol, name: s.name, exchange: s.exchange }));
+  localStorage.setItem('my_tracked_stocks', JSON.stringify(basicStocks));
+}
+
 async function fetchWithFallback(targetUrl) {
   // Proxy'leri sırayla dene
   for (const proxy of PROXIES) {
@@ -657,6 +662,9 @@ async function addStock(sym, name, exch) {
   histories[sym] = [];
   const s = { symbol: sym, name, exchange: exch, data: null };
   stocks.push(s);
+  
+  saveToStorage(); // <-- Hisse eklendiğinde tarayıcı hafızasına kaydet
+  
   closeModal(); renderUI();
   document.getElementById('grid').appendChild(makeSkeletonCard(sym, name, exch));
   try {
@@ -666,7 +674,6 @@ async function addStock(sym, name, exch) {
     setError(sym, e.message.slice(0, 30));
   }
 }
-
 async function retryFetch(sym) {
   const s = stocks.find(x => x.symbol === sym); if (!s) return;
   const b = document.querySelector('#card-' + sym + ' .badge');
@@ -681,6 +688,9 @@ function removeStock(sym) {
   if (charts[sym]) { charts[sym].destroy(); delete charts[sym]; }
   delete histories[sym];
   stocks = stocks.filter(s => s.symbol !== sym);
+  
+  saveToStorage(); // <-- Hisse silindiğinde tarayıcı hafızasını güncelle
+  
   const c = document.getElementById('card-' + sym); if (c) c.remove();
   renderUI();
 }
@@ -789,6 +799,19 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 // ── Başlat ──
 updateBellUI();
 filterList();
+
+// Sayfa her açıldığında yerel hafızadan kayıtlı hisseleri yükle
+const savedStocks = localStorage.getItem('my_tracked_stocks');
+if (savedStocks) {
+  try {
+    const parsed = JSON.parse(savedStocks);
+    parsed.forEach(item => {
+      addStock(item.symbol, item.name, item.exchange);
+    });
+  } catch (e) {
+    console.error("Kayıtlı veriler yüklenirken hata oluştu:", e);
+  }
+}
 
 // file:// protokolü uyarısı
 if (location.protocol === 'file:') {
