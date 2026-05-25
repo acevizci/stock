@@ -1,45 +1,28 @@
 // ── Hisse Listeleri ──
 
-// Yedek liste — screener başarısız olursa kullanılır
-const BIST_FALLBACK = [
-  {s:'THYAO',n:'Türk Hava Yolları'},{s:'GARAN',n:'Garanti BBVA'},{s:'ASELS',n:'Aselsan'},
-  {s:'SISE',n:'Şişe Cam'},{s:'EREGL',n:'Ereğli Demir Çelik'},{s:'BIMAS',n:'BİM Mağazaları'},
-  {s:'KCHOL',n:'Koç Holding'},{s:'SAHOL',n:'Sabancı Holding'},{s:'AKBNK',n:'Akbank'},
-  {s:'YKBNK',n:'Yapı Kredi'},{s:'ISCTR',n:'İş Bankası C'},{s:'HALKB',n:'Halkbank'},
-  {s:'VAKBN',n:'Vakıfbank'},{s:'FROTO',n:'Ford Otosan'},{s:'TOASO',n:'Tofaş'},
-  {s:'TUPRS',n:'Tüpraş'},{s:'TCELL',n:'Turkcell'},{s:'PGSUS',n:'Pegasus'},
-  {s:'TAVHL',n:'TAV Havalimanları'},{s:'EKGYO',n:'Emlak Konut GYO'},
-  {s:'ENKAI',n:'Enka İnşaat'},{s:'PETKM',n:'Petkim'},{s:'ARCLK',n:'Arçelik'},
-  {s:'MGROS',n:'Migros Ticaret'},{s:'SOKM',n:'Şok Marketler'},
-  {s:'KOZAL',n:'Koza Altın'},{s:'MAVI',n:'Mavi Giyim'},{s:'LOGO',n:'Logo Yazılım'},
-  {s:'ULKER',n:'Ülker Bisküvi'},{s:'ODAS',n:'Odaş Elektrik'},
-  {s:'AEFES',n:'Anadolu Efes'},{s:'TTKOM',n:'Türk Telekom'},
-  {s:'TTRAK',n:'Türk Traktör'},{s:'SASA',n:'Sasa Polyester'},{s:'DOHOL',n:'Doğan Holding'},
+// Son çare — screener ve localStorage ikisi de boşsa bunlar gösterilir
+const BIST_EMERGENCY = [
+  {s:'THYAO',n:'Türk Hava Yolları'},{s:'GARAN',n:'Garanti BBVA'},
+  {s:'ASELS',n:'Aselsan'},{s:'SISE',n:'Şişe Cam'},{s:'KCHOL',n:'Koç Holding'},
 ];
 
-// Dinamik BIST listesi — screener'dan doldurulur
-let BIST_LIST = [...BIST_FALLBACK];
+// Dinamik BIST listesi — önce localStorage'dan yüklenir, sonra screener günceller
+let BIST_LIST = (() => {
+  try {
+    const cached = JSON.parse(localStorage.getItem('bist_list') || '[]');
+    return cached.length >= 5 ? cached : BIST_EMERGENCY;
+  } catch (_) { return BIST_EMERGENCY; }
+})();
 
 /**
  * Yahoo Finance screener üzerinden Borsa İstanbul hisselerini çeker.
  * Piyasa değerine göre büyükten küçüğe sıralı, ilk 150 hisse.
- * Sonuçlar sessionStorage'a cache'lenir (sayfa yenilenene kadar tekrar çekilmez).
+ * Başarılı sonuç localStorage'a kaydedilir (kalıcı cache).
+ * sessionStorage ile aynı oturumda tekrar istek atılmaz.
  */
 async function fetchBistList() {
-  const CACHE_KEY = 'bist_list_cache';
-
-  // sessionStorage cache kontrolü
-  try {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed.length > 0) {
-        BIST_LIST = parsed;
-        filterList(); // modalı güncelle
-        return;
-      }
-    }
-  } catch (_) {}
+  // Aynı oturumda zaten çekildiyse tekrar atma
+  if (sessionStorage.getItem('bist_list_fetched') === '1') return;
 
   const screenerUrl = WORKER_URL + '/v1/finance/screener?lang=tr-TR&region=TR';
   const body = JSON.stringify({
@@ -56,8 +39,7 @@ async function fetchBistList() {
         { operator: 'eq', operands: ['region',   'tr'] },
       ],
     },
-    userId:        '',
-    userIdType:    'guid',
+    userId: '', userIdType: 'guid',
   });
 
   try {
@@ -66,30 +48,29 @@ async function fetchBistList() {
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) throw new Error('Screener HTTP ' + res.status);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
 
     const data   = await res.json();
     const quotes = data?.finance?.result?.[0]?.quotes;
     if (!quotes?.length) throw new Error('Boş liste');
 
-    // Sembolü .IS'den temizle, şirket adını al
     const list = quotes
       .filter(q => q.symbol && q.shortName)
-      .map(q => ({
-        s: q.symbol.replace(/\.IS$/i, ''),
-        n: q.shortName,
-      }));
+      .map(q => ({ s: q.symbol.replace(/\.IS$/i, ''), n: q.shortName }));
 
     if (list.length < 5) throw new Error('Yetersiz sonuç');
 
+    // Güncelle — hem bellek hem kalıcı cache
     BIST_LIST = list;
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(list));
-    filterList(); // modal açıksa güncelle
-    console.log(`[Hisse] BIST listesi dinamik yüklendi: ${list.length} hisse`);
+    localStorage.setItem('bist_list', JSON.stringify(list));
+    sessionStorage.setItem('bist_list_fetched', '1');
+    filterList();
+    console.log(`[Hisse] BIST listesi güncellendi: ${list.length} hisse`);
 
   } catch (err) {
-    console.warn('[Hisse] BIST screener başarısız, yedek liste kullanılıyor:', err.message);
-    // BIST_FALLBACK zaten yüklü, bir şey yapmaya gerek yok
+    // localStorage cache varsa zaten yüklenmiş durumda, sadece logla
+    console.warn('[Hisse] BIST screener başarısız:', err.message,
+      BIST_LIST === BIST_EMERGENCY ? '→ acil liste kullanılıyor' : '→ önbellek kullanılıyor');
   }
 }
 const INTL_LIST = [
