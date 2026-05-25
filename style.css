@@ -224,6 +224,9 @@ body {
 .badge.neutral { background: var(--surface3); color: var(--muted); border: 1px solid var(--border2); }
 .badge.loading { background: var(--surface3); color: var(--muted); border: 1px solid var(--border); animation: skel 1.4s ease-in-out infinite; }
 .badge.error   { background: var(--dn-bg); color: var(--dn); border: 1px solid var(--dn-glow); cursor: pointer; }
+.badge.div     { background: rgba(251,191,36,.10); color: #fbbf24; border: 1px solid rgba(251,191,36,.25); }
+
+.c-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 @keyframes skel { 0%,100% { opacity:.22; } 50% { opacity:.75; } }
 
@@ -356,6 +359,23 @@ body {
 .s-item.added { opacity: .3; pointer-events: none; }
 .s-sym { font-size: 13px; font-weight: 700; color: var(--text); font-family: var(--mono); }
 .s-name { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.s-div  {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  color: #fbbf24; background: rgba(251,191,36,.12);
+  border: 1px solid rgba(251,191,36,.25); border-radius: 4px;
+  padding: 1px 5px; margin-left: 5px; vertical-align: middle; font-family: var(--mono);
+}
+
+.div-filter-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; font-size: 11px; font-weight: 600;
+  border-radius: 20px; border: 1px solid var(--border2);
+  background: var(--surface2); color: var(--muted);
+  cursor: pointer; font-family: var(--mono); letter-spacing: .04em;
+  transition: all .15s;
+}
+.div-filter-btn:hover  { border-color: rgba(251,191,36,.3); color: #fbbf24; }
+.div-filter-btn.active { background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.3); color: #fbbf24; }
 
 .divider {
   display: flex; align-items: center; gap: 10px;

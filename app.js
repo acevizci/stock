@@ -56,7 +56,11 @@ async function fetchBistList() {
 
     const list = quotes
       .filter(q => q.symbol && q.shortName)
-      .map(q => ({ s: q.symbol.replace(/\.IS$/i, ''), n: q.shortName }));
+      .map(q => ({
+        s:   q.symbol.replace(/\.IS$/i, ''),
+        n:   q.shortName,
+        div: q.trailingAnnualDividendYield || 0,
+      }));
 
     if (list.length < 5) throw new Error('Yetersiz sonuç');
 
@@ -73,22 +77,80 @@ async function fetchBistList() {
       BIST_LIST === BIST_EMERGENCY ? '→ acil liste kullanılıyor' : '→ önbellek kullanılıyor');
   }
 }
-const INTL_LIST = [
+// ── Uluslararası hisse listesi (dinamik) ──
+const INTL_EMERGENCY = [
   {s:'AAPL',n:'Apple',x:'NASDAQ'},{s:'MSFT',n:'Microsoft',x:'NASDAQ'},
   {s:'NVDA',n:'NVIDIA',x:'NASDAQ'},{s:'GOOGL',n:'Alphabet',x:'NASDAQ'},
-  {s:'AMZN',n:'Amazon',x:'NASDAQ'},{s:'META',n:'Meta Platforms',x:'NASDAQ'},
-  {s:'TSLA',n:'Tesla',x:'NASDAQ'},{s:'AVGO',n:'Broadcom',x:'NASDAQ'},
-  {s:'ORCL',n:'Oracle',x:'NYSE'},{s:'NFLX',n:'Netflix',x:'NASDAQ'},
-  {s:'JPM',n:'JPMorgan Chase',x:'NYSE'},{s:'V',n:'Visa',x:'NYSE'},
-  {s:'WMT',n:'Walmart',x:'NYSE'},{s:'XOM',n:'ExxonMobil',x:'NYSE'},
-  {s:'JNJ',n:'Johnson & Johnson',x:'NYSE'},{s:'BAC',n:'Bank of America',x:'NYSE'},
-  {s:'BRK.B',n:'Berkshire Hathaway',x:'NYSE'},{s:'GOLD',n:'Barrick Gold',x:'NYSE'},
-  {s:'AMD',n:'AMD',x:'NASDAQ'},{s:'INTC',n:'Intel',x:'NASDAQ'},
+  {s:'AMZN',n:'Amazon',x:'NASDAQ'},{s:'JPM',n:'JPMorgan Chase',x:'NYSE'},
+  {s:'META',n:'Meta Platforms',x:'NASDAQ'},{s:'XOM',n:'ExxonMobil',x:'NYSE'},
 ];
+
+// Exchange kodu → borsa adı eşlemesi
+const EXCH_MAP = {
+  NMS:'NASDAQ', NasdaqGS:'NASDAQ', NasdaqGM:'NASDAQ', NasdaqCM:'NASDAQ',
+  NYQ:'NYSE', NYSE:'NYSE', PCX:'NYSE',
+};
+
+let INTL_LIST = (() => {
+  try {
+    const cached = JSON.parse(localStorage.getItem('intl_list') || '[]');
+    return cached.length >= 5 ? cached : INTL_EMERGENCY;
+  } catch (_) { return INTL_EMERGENCY; }
+})();
+
+async function fetchIntlList() {
+  if (sessionStorage.getItem('intl_list_fetched') === '1') return;
+
+  const screenerUrl = WORKER_URL + '/v1/finance/screener?lang=en-US&region=US';
+  const body = JSON.stringify({
+    offset: 0, size: 150,
+    sortField: 'intradaymarketcap', sortType: 'DESC',
+    quoteType: 'EQUITY', topOperator: 'AND',
+    query: {
+      operator: 'AND',
+      operands: [{ operator: 'eq', operands: ['region', 'us'] }],
+    },
+    userId: '', userIdType: 'guid',
+  });
+
+  try {
+    const res = await fetch(screenerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    const data   = await res.json();
+    const quotes = data?.finance?.result?.[0]?.quotes;
+    if (!quotes?.length) throw new Error('Boş liste');
+
+    const list = quotes
+      .filter(q => q.symbol && q.shortName && !q.symbol.includes('.'))
+      .map(q => ({
+        s:   q.symbol,
+        n:   q.shortName,
+        x:   EXCH_MAP[q.exchange] || 'NASDAQ',
+        div: q.trailingAnnualDividendYield || 0,
+      }));
+
+    if (list.length < 5) throw new Error('Yetersiz sonuç');
+
+    INTL_LIST = list;
+    localStorage.setItem('intl_list', JSON.stringify(list));
+    sessionStorage.setItem('intl_list_fetched', '1');
+    filterList();
+    console.log(`[Hisse] INTL listesi güncellendi: ${list.length} hisse`);
+
+  } catch (err) {
+    console.warn('[Hisse] INTL screener başarısız:', err.message,
+      INTL_LIST === INTL_EMERGENCY ? '→ acil liste' : '→ önbellek');
+  }
+}
 
 // ── State ──
 let stocks = [], charts = {}, histories = {};
-let curTab = 'bist', notifOn = false, toastT = null;
+let curTab = 'bist', notifOn = false, toastT = null, showOnlyDiv = false;
 if ('Notification' in window && Notification.permission === 'granted') notifOn = true;
 
 // ── Proxy ──
@@ -138,12 +200,21 @@ async function fetchStockPrice(symbol, exchange) {
     volume: volumes[volumes.length - 2],
   } : null;
 
+  const dividendYield = meta.dividendYield
+    || meta.trailingAnnualDividendYield
+    || 0;
+  const dividendRate  = meta.dividendRate
+    || meta.trailingAnnualDividendRate
+    || 0;
+
   return {
     price, change, changePct,
     high:      meta.regularMarketDayHigh || highs[highs.length - 1] || price,
     low:       meta.regularMarketDayLow  || lows[lows.length   - 1] || price,
     volume:    meta.regularMarketVolume  || volumes[volumes.length - 1] || 0,
     yesterday,
+    dividendYield,
+    dividendRate,
     currency:  meta.currency || (exchange === 'BIST' ? 'TRY' : 'USD'),
     closes,
   };
@@ -232,7 +303,9 @@ function makeSkeletonCard(sym, name, exch) {
       <button class="rm-btn" onclick="removeStock('${sym}')" title="Kaldır"><i class="ti ti-x"></i></button>
     </div>
     <div class="c-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>
-    <span class="badge loading">Veri çekiliyor...</span>
+    <div class="c-badges">
+      <span class="badge loading">Veri çekiliyor...</span>
+    </div>
     <div class="chart-area"><canvas id="cv-${sym}" aria-label="${sym} fiyat grafiği"></canvas></div>
     <div class="sep"></div>
     <div class="c-meta">
@@ -277,10 +350,14 @@ function updateCard(s, prevPrice) {
   const vals    = card.querySelectorAll('.m-val');
 
   if (priceEl) priceEl.textContent = fmt(d.price, d.currency);
-  if (badgeEl) {
-    badgeEl.textContent = `${arrow} ${Math.abs(d.changePct).toFixed(2)}% (${sign}${d.change.toFixed(2)})`;
-    badgeEl.className   = 'badge ' + D;
-    badgeEl.onclick     = null;
+
+  // Badge satırı — değişim + temettü rozeti
+  const badgesEl = card.querySelector('.c-badges');
+  if (badgesEl) {
+    const divHtml = d.dividendYield > 0
+      ? `<span class="badge div"><i class="ti ti-coin"></i> ${(d.dividendYield * 100).toFixed(2)}% TEM</span>`
+      : '';
+    badgesEl.innerHTML = `<span class="badge ${D}">${arrow} ${Math.abs(d.changePct).toFixed(2)}% (${sign}${d.change.toFixed(2)})</span>${divHtml}`;
   }
 
   // Meta — bugün
@@ -432,29 +509,45 @@ function clearErr()   { document.getElementById('cerr').style.display = 'none'; 
 
 function switchTab(t) {
   curTab = t;
+  showOnlyDiv = false;
+  const btn = document.getElementById('div-filter-btn');
+  if (btn) btn.classList.remove('active');
   document.getElementById('tb-bist').className = 'tab' + (t === 'bist' ? ' active' : '');
   document.getElementById('tb-intl').className = 'tab' + (t === 'intl' ? ' active' : '');
   document.getElementById('search-inp').value = '';
   filterList();
 }
 
+function toggleDivFilter() {
+  showOnlyDiv = !showOnlyDiv;
+  const btn = document.getElementById('div-filter-btn');
+  if (btn) btn.classList.toggle('active', showOnlyDiv);
+  filterList();
+}
+
 function filterList() {
-  const q    = document.getElementById('search-inp').value.toLowerCase().trim();
-  const raw  = curTab === 'bist' ? BIST_LIST.map(x => ({...x, x:'BIST'})) : INTL_LIST;
+  const q   = document.getElementById('search-inp').value.toLowerCase().trim();
+  let raw   = curTab === 'bist' ? BIST_LIST.map(x => ({...x, x:'BIST'})) : INTL_LIST;
+
+  // Temettü filtresi
+  if (showOnlyDiv) raw = raw.filter(x => (x.div || 0) > 0);
+
   const list = q ? raw.filter(x => x.s.toLowerCase().includes(q) || x.n.toLowerCase().includes(q)) : raw;
   const el   = document.getElementById('s-list');
   el.innerHTML = '';
+
   if (!list.length) {
-    el.innerHTML = '<div style="padding:18px;text-align:center;font-size:12px;color:var(--muted)">Sonuç bulunamadı</div>';
+    el.innerHTML = `<div style="padding:18px;text-align:center;font-size:12px;color:var(--muted)">${showOnlyDiv ? 'Temettü verisi olan hisse bulunamadı' : 'Sonuç bulunamadı'}</div>`;
     return;
   }
   list.forEach(item => {
-    const added = !!stocks.find(s => s.symbol === item.s);
-    const div   = document.createElement('div');
+    const added   = !!stocks.find(s => s.symbol === item.s);
+    const divPct  = item.div > 0 ? `<span class="s-div">${(item.div * 100).toFixed(1)}%</span>` : '';
+    const div     = document.createElement('div');
     div.className = 's-item' + (added ? ' added' : '');
     div.innerHTML = `
       <div>
-        <div class="s-sym">${item.s}</div>
+        <div class="s-sym">${item.s} ${divPct}</div>
         <div class="s-name">${item.n}</div>
       </div>
       <i class="ti ti-${added ? 'check' : 'plus'}" style="font-size:15px;color:${added ? 'var(--up)' : 'var(--muted)'}"></i>`;
@@ -480,8 +573,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 updateBellUI();
 filterList();
 
-// BIST listesini dinamik çek (arka planda, sayfayı bloklamaz)
+// BIST ve INTL listelerini dinamik çek
 fetchBistList();
+fetchIntlList();
 
 // LocalStorage'dan kayıtlı hisseleri yükle
 const savedStocks = localStorage.getItem('my_tracked_stocks');
