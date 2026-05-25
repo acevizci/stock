@@ -10,23 +10,20 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <style>
     :root {
-      --up: #059669; --up-bg: rgba(5,150,105,.08); --up-bd: rgba(5,150,105,.22);
-      --dn: #e11d48; --dn-bg: rgba(225,29,72,.08); --dn-bd: rgba(225,29,72,.22);
-      --bg: #f4f4f5; --surface: #ffffff; --surface2: #f0f0f1; --surface3: #e8e8ea;
-      --border: rgba(0,0,0,.07); --border2: rgba(0,0,0,.12);
-      --text: #18181b; --muted: #71717a; --muted2: #a1a1aa;
-      --accent: #6366f1; --accent-bg: rgba(99,102,241,.08);
-      --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+      --up: #16a34a; --up-bg: rgba(22,163,74,.1); --up-bd: rgba(22,163,74,.28);
+      --dn: #dc2626; --dn-bg: rgba(220,38,38,.1); --dn-bd: rgba(220,38,38,.28);
+      --bg: #f8f8f7; --surface: #ffffff; --surface2: #f3f3f1;
+      --border: #e4e4e0; --border2: #d0d0cc;
+      --text: #1a1a18; --muted: #737370; --muted2: #a0a09d;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
       --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
-      --shadow-md: 0 4px 16px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.04);
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #09090b; --surface: #111113; --surface2: #18181b; --surface3: #27272a;
-        --border: rgba(255,255,255,.06); --border2: rgba(255,255,255,.10);
-        --text: #fafafa; --muted: #71717a; --muted2: #52525b;
-        --shadow-sm: 0 1px 3px rgba(0,0,0,.3); --shadow-md: 0 4px 20px rgba(0,0,0,.4);
+        --bg: #0f0f0e; --surface: #1a1a18; --surface2: #222220;
+        --border: #2a2a28; --border2: #363634;
+        --text: #f0f0ed; --muted: #737370; --muted2: #4a4a48;
       }
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,62 +37,51 @@
     }
 
     /* ── Layout ── */
-    .app-shell { max-width: 1140px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+    .app-shell { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
 
     /* ── Header ── */
     .hdr {
       display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 2rem; gap: 12px; flex-wrap: wrap;
+      margin-bottom: 1.75rem; gap: 12px; flex-wrap: wrap;
     }
-    .h-brand { display: flex; align-items: center; gap: 12px; }
+    .h-brand { display: flex; align-items: center; gap: 10px; }
     .h-logo {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: var(--accent); display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 2px 8px rgba(99,102,241,.35);
+      width: 34px; height: 34px; border-radius: 9px;
+      background: var(--text); display: flex; align-items: center; justify-content: center;
     }
-    .h-logo i { color: #fff; font-size: 18px; }
-    .h-title { font-size: 17px; font-weight: 600; letter-spacing: -.025em; color: var(--text); }
+    .h-logo i { color: var(--bg); font-size: 18px; }
+    .h-title { font-size: 17px; font-weight: 600; letter-spacing: -.02em; color: var(--text); }
     .live-tag {
       display: none; align-items: center; gap: 5px;
-      padding: 3px 10px; background: var(--up-bg); border: 1px solid var(--up-bd);
+      padding: 3px 9px; background: var(--up-bg); border: 1px solid var(--up-bd);
       border-radius: 20px; font-size: 10px; font-weight: 600;
       color: var(--up); letter-spacing: .07em; font-family: var(--mono);
     }
     .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--up); animation: blink 1.8s ease-in-out infinite; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
-
-    /* piyasa durumu göstergesi */
-    .market-status {
-      display: none; align-items: center; gap: 5px;
-      padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 600;
-      letter-spacing: .06em; font-family: var(--mono); border: 1px solid;
-    }
-    .market-status.open  { background: var(--up-bg); border-color: var(--up-bd); color: var(--up); }
-    .market-status.closed{ background: var(--surface2); border-color: var(--border2); color: var(--muted); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
     .h-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .upd-txt { font-size: 11px; color: var(--muted); font-family: var(--mono); }
 
     /* ── Buttons ── */
     .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 15px; font-size: 13px; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 8px 14px; font-size: 13px; font-weight: 500;
       border-radius: var(--radius-sm); border: 1px solid var(--border2);
       background: var(--surface); color: var(--text);
       cursor: pointer; font-family: var(--sans);
-      transition: background .12s, border-color .12s, opacity .12s, box-shadow .12s;
-      white-space: nowrap; box-shadow: var(--shadow-sm);
+      transition: background .12s, border-color .12s, opacity .12s;
+      white-space: nowrap;
     }
-    .btn:hover { background: var(--surface2); border-color: var(--border2); }
+    .btn:hover { background: var(--surface2); }
     .btn:disabled { opacity: .4; cursor: not-allowed; }
     .btn-primary {
-      background: var(--accent); color: #fff;
-      border-color: var(--accent); font-weight: 600;
-      box-shadow: 0 2px 8px rgba(99,102,241,.3);
+      background: var(--text); color: var(--bg);
+      border-color: var(--text); font-weight: 600;
     }
-    .btn-primary:hover { opacity: .9; background: var(--accent); box-shadow: 0 4px 14px rgba(99,102,241,.4); }
+    .btn-primary:hover { opacity: .88; background: var(--text); }
     .btn-icon { padding: 8px 10px; }
-    .btn-bell.on   { background: var(--up-bg); border-color: var(--up-bd); color: var(--up); }
+    .btn-bell.on  { background: var(--up-bg); border-color: var(--up-bd); color: var(--up); }
     .btn-bell.denied { background: var(--dn-bg); border-color: var(--dn-bd); color: var(--dn); }
     @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -103,123 +89,99 @@
     .sbar { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 1.5rem; }
     .sc {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-md); padding: .875rem 1.25rem;
-      box-shadow: var(--shadow-sm);
-      transition: box-shadow .15s, border-color .15s;
+      border-radius: var(--radius-md); padding: .875rem 1.125rem;
+      transition: border-color .15s;
     }
-    .sc:hover { border-color: var(--border2); box-shadow: var(--shadow-md); }
+    .sc:hover { border-color: var(--border2); }
     .sc-l {
-      font-size: 10px; font-weight: 600; letter-spacing: .09em;
+      font-size: 10px; font-weight: 600; letter-spacing: .08em;
       text-transform: uppercase; color: var(--muted);
-      font-family: var(--mono); margin-bottom: 7px;
+      font-family: var(--mono); margin-bottom: 6px;
     }
-    .sc-v { font-size: 26px; font-weight: 700; font-family: var(--mono); letter-spacing: -.03em; }
+    .sc-v { font-size: 24px; font-weight: 600; font-family: var(--mono); }
 
     /* ── Grid & Cards ── */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); gap: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
     .card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 1.25rem 1.375rem;
-      position: relative; overflow: hidden;
+      border-radius: var(--radius-lg); padding: 1.2rem 1.3rem;
+      border-left-width: 3px; border-left-color: var(--border2);
       animation: fadein .28s ease both;
-      box-shadow: var(--shadow-sm);
-      transition: box-shadow .2s, border-color .2s, transform .15s;
+      transition: box-shadow .15s, border-color .2s;
     }
-    /* üst çizgi aksanı */
-    .card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-      background: var(--border2); transition: background .3s;
-    }
-    .card.up::before   { background: var(--up); }
-    .card.down::before { background: var(--dn); }
-
-    .card:hover { box-shadow: var(--shadow-md); border-color: var(--border2); transform: translateY(-1px); }
-    @keyframes fadein { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-
-    /* ── PULSE ANİMASYONLARI ── */
-    @keyframes pulse-up {
-      0%   { box-shadow: var(--shadow-sm); background: var(--surface); }
-      15%  { box-shadow: 0 0 0 4px var(--up-bd), 0 4px 20px rgba(5,150,105,.2); background: var(--up-bg); }
-      60%  { box-shadow: 0 0 0 2px var(--up-bd), 0 2px 12px rgba(5,150,105,.1); background: var(--up-bg); }
-      100% { box-shadow: var(--shadow-sm); background: var(--surface); }
-    }
-    @keyframes pulse-down {
-      0%   { box-shadow: var(--shadow-sm); background: var(--surface); }
-      15%  { box-shadow: 0 0 0 4px var(--dn-bd), 0 4px 20px rgba(225,29,72,.2); background: var(--dn-bg); }
-      60%  { box-shadow: 0 0 0 2px var(--dn-bd), 0 2px 12px rgba(225,29,72,.1); background: var(--dn-bg); }
-      100% { box-shadow: var(--shadow-sm); background: var(--surface); }
-    }
-    .card.pulse-up   { animation: pulse-up 1.6s ease forwards; }
-    .card.pulse-down { animation: pulse-down 1.6s ease forwards; }
+    .card:hover { box-shadow: 0 2px 14px rgba(0,0,0,.07); }
+    @keyframes fadein { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    .card.up   { border-left-color: var(--up); }
+    .card.down { border-left-color: var(--dn); }
+    .card.shake { animation: shake .38s ease; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 30%{transform:translateX(-4px)} 70%{transform:translateX(4px)} }
 
     .c-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-    .c-sym { font-size: 15px; font-weight: 700; color: var(--text); font-family: var(--mono); letter-spacing: -.01em; }
-    .c-xch {
-      font-size: 9px; color: var(--muted); font-family: var(--mono); margin-left: 6px;
-      font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
-      background: var(--surface2); padding: 2px 5px; border-radius: 4px;
-    }
+    .c-sym { font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+    .c-xch { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-left: 6px; font-weight: 400; }
     .c-name { font-size: 12px; color: var(--muted); margin-top: 3px; }
     .rm-btn {
       background: none; border: 1px solid transparent; cursor: pointer;
       color: var(--muted2); font-size: 14px; padding: 4px 6px;
-      border-radius: 6px; opacity: .5; line-height: 1; transition: all .12s; flex-shrink: 0;
+      border-radius: 6px; opacity: .6; line-height: 1;
+      transition: all .12s;
     }
     .rm-btn:hover { opacity: 1; color: var(--dn); border-color: var(--dn-bd); background: var(--dn-bg); }
 
     .c-price {
-      font-size: 28px; font-weight: 700; color: var(--text);
-      font-family: var(--mono); letter-spacing: -.04em;
-      margin-bottom: 7px; min-height: 34px; transition: color .3s;
+      font-size: 28px; font-weight: 600; color: var(--text);
+      font-family: var(--mono); letter-spacing: -.03em;
+      margin-bottom: 7px; min-height: 34px;
     }
     .badge {
       display: inline-flex; align-items: center; gap: 3px;
-      font-size: 11px; font-weight: 600; padding: 3px 8px;
-      border-radius: 5px; font-family: var(--mono); letter-spacing: .01em;
+      font-size: 11px; font-weight: 500; padding: 3px 8px;
+      border-radius: 5px; font-family: var(--mono);
     }
     .badge.up      { background: var(--up-bg); color: var(--up); border: 1px solid var(--up-bd); }
     .badge.down    { background: var(--dn-bg); color: var(--dn); border: 1px solid var(--dn-bd); }
-    .badge.neutral { background: var(--surface2); color: var(--muted); border: 1px solid var(--border2); }
+    .badge.neutral { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
     .badge.loading { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); animation: skel 1.3s ease-in-out infinite; }
     .badge.error   { background: var(--dn-bg); color: var(--dn); border: 1px solid var(--dn-bd); cursor: pointer; }
-    @keyframes skel { 0%,100%{opacity:.3} 50%{opacity:.8} }
+    @keyframes skel { 0%,100%{opacity:.35} 50%{opacity:.85} }
 
-    .chart-area { margin: 12px 0; height: 56px; }
-    .sep { height: 1px; background: var(--border); margin: 12px 0; }
+    .chart-area { margin: 12px 0; height: 54px; }
+    .sep { height: 1px; background: var(--border); margin: 10px 0; }
     .c-meta { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
     .m-lbl {
-      font-size: 9px; font-weight: 600; letter-spacing: .09em;
-      text-transform: uppercase; color: var(--muted2);
-      font-family: var(--mono); margin-bottom: 4px;
+      font-size: 9px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted);
+      font-family: var(--mono); margin-bottom: 3px;
     }
     .m-val { font-size: 12px; font-weight: 500; font-family: var(--mono); color: var(--text); }
-    .skel-box { background: var(--surface2); border-radius: 5px; animation: skel 1.3s ease-in-out infinite; }
+    .skel-box { background: var(--surface2); border-radius: 4px; animation: skel 1.3s ease-in-out infinite; }
 
     /* ── Empty state ── */
     .empty {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 6rem 1rem; text-align: center;
+      justify-content: center; padding: 5rem 1rem; text-align: center;
     }
     .empty-icon {
-      width: 64px; height: 64px; border-radius: 18px;
-      background: var(--accent-bg); border: 1px solid rgba(99,102,241,.2);
-      display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem;
+      width: 58px; height: 58px; border-radius: 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1.25rem;
     }
-    .empty-icon i { font-size: 28px; color: var(--accent); }
-    .empty-t { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+    .empty-icon i { font-size: 26px; color: var(--muted); opacity: .7; }
+    .empty-t { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
     .empty-s { font-size: 13px; color: var(--muted); line-height: 1.7; }
 
     /* ── Toast ── */
     .toast {
-      position: fixed; bottom: 1.25rem; right: 1.25rem; width: 260px;
+      position: fixed; bottom: 1.25rem; right: 1.25rem; width: 250px;
       background: var(--surface); border: 1px solid var(--dn-bd);
-      border-radius: var(--radius-md); padding: 12px 15px;
-      z-index: 9999; transform: translateY(16px) scale(.97); opacity: 0;
-      transition: transform .32s cubic-bezier(.34,1.56,.64,1), opacity .28s ease;
-      pointer-events: none; box-shadow: var(--shadow-md);
+      border-radius: var(--radius-md); padding: 12px 14px;
+      z-index: 9999; transform: translateY(20px); opacity: 0;
+      transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .3s ease;
+      pointer-events: none; box-shadow: 0 6px 24px rgba(0,0,0,.12);
     }
-    .toast.show { transform: translateY(0) scale(1); opacity: 1; pointer-events: auto; }
-    .toast-sym { font-size: 12px; font-weight: 700; color: var(--dn); font-family: var(--mono); margin-bottom: 3px; }
+    .toast.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+    .toast-sym { font-size: 12px; font-weight: 600; color: var(--dn); font-family: var(--mono); margin-bottom: 3px; }
     .toast-body { font-size: 12px; color: var(--muted); line-height: 1.5; white-space: pre-line; }
     .toast-close { position: absolute; top: 9px; right: 10px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; opacity: .6; }
     .toast-close:hover { opacity: 1; }
@@ -227,34 +189,35 @@
     /* ── Modal overlay ── */
     .overlay {
       display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,.45); backdrop-filter: blur(6px);
-      z-index: 100; align-items: center; justify-content: center; padding: 1rem;
+      background: rgba(0,0,0,.4); backdrop-filter: blur(4px);
+      z-index: 100; align-items: center; justify-content: center;
+      padding: 1rem;
     }
     .overlay.open { display: flex; }
     .modal {
       background: var(--surface); border: 1px solid var(--border2);
       border-radius: var(--radius-lg); width: 420px; max-width: 100%;
       display: flex; flex-direction: column; gap: 14px;
-      padding: 1.5rem; box-shadow: 0 24px 64px rgba(0,0,0,.22);
+      padding: 1.5rem; box-shadow: 0 20px 60px rgba(0,0,0,.18);
       max-height: 90vh; overflow-y: auto;
     }
     .modal::-webkit-scrollbar { width: 4px; }
     .modal::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
     .modal-hdr { display: flex; justify-content: space-between; align-items: center; }
-    .modal-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
-    .modal-x { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 16px; padding: 4px 6px; opacity: .8; transition: opacity .12s, background .12s; line-height: 1; }
-    .modal-x:hover { opacity: 1; background: var(--surface3); }
+    .modal-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .modal-x { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 2px; opacity: .7; transition: opacity .12s; }
+    .modal-x:hover { opacity: 1; }
 
     .info-note {
       display: flex; align-items: center; gap: 7px;
-      padding: 7px 11px; background: var(--accent-bg);
-      border: 1px solid rgba(99,102,241,.18); border-radius: 8px;
-      font-size: 11px; color: var(--accent); font-family: var(--mono);
+      padding: 7px 11px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px;
+      font-size: 11px; color: var(--muted); font-family: var(--mono);
     }
 
     .tabs { display: flex; background: var(--surface2); border-radius: 10px; padding: 3px; gap: 3px; }
     .tab {
-      flex: 1; padding: 7px; font-size: 12px; font-weight: 600;
+      flex: 1; padding: 7px; font-size: 12px; font-weight: 500;
       background: none; border: none; cursor: pointer;
       color: var(--muted); border-radius: 8px; font-family: var(--sans);
       transition: background .12s, color .12s;
@@ -269,7 +232,7 @@
       background: var(--surface2); color: var(--text);
       font-family: var(--sans); outline: none; transition: border-color .15s;
     }
-    .s-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+    .s-inp:focus { border-color: var(--text); }
     .s-inp::placeholder { color: var(--muted2); }
 
     .s-list { border: 1px solid var(--border); border-radius: 10px; overflow-y: auto; max-height: 220px; }
@@ -283,7 +246,7 @@
     .s-item:last-child { border-bottom: none; }
     .s-item:hover { background: var(--surface2); }
     .s-item.added { opacity: .35; pointer-events: none; }
-    .s-sym { font-size: 13px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+    .s-sym { font-size: 13px; font-weight: 600; color: var(--text); font-family: var(--mono); }
     .s-name { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
     .divider {
@@ -297,9 +260,10 @@
     .ci {
       padding: 8px 10px; font-size: 12px; border-radius: 8px;
       border: 1px solid var(--border2); background: var(--surface2);
-      color: var(--text); font-family: var(--mono); outline: none; transition: border-color .15s;
+      color: var(--text); font-family: var(--mono); outline: none;
+      transition: border-color .15s;
     }
-    .ci:focus { border-color: var(--accent); }
+    .ci:focus { border-color: var(--text); }
     .ci::placeholder { color: var(--muted2); }
     .cerr { font-size: 11px; color: var(--dn); display: none; font-family: var(--mono); }
     .m-footer { display: flex; justify-content: flex-end; gap: 8px; }
@@ -307,9 +271,9 @@
     /* ── Responsive ── */
     @media (max-width: 540px) {
       .app-shell { padding: 1.25rem 1rem 3rem; }
-      .sbar { gap: 7px; }
-      .sc { padding: .625rem .875rem; }
-      .sc-v { font-size: 22px; }
+      .sbar { grid-template-columns: repeat(3,1fr); gap: 7px; }
+      .sc { padding: .625rem .75rem; }
+      .sc-v { font-size: 20px; }
       .h-title { font-size: 15px; }
     }
   </style>
@@ -323,7 +287,6 @@
       <div class="h-logo"><i class="ti ti-trending-up"></i></div>
       <span class="h-title">Hisse Takibi</span>
       <div class="live-tag" id="live-tag"><div class="live-dot"></div>CANLI</div>
-      <div class="market-status" id="market-status"></div>
     </div>
     <div class="h-right">
       <span class="upd-txt" id="upd"></span>
@@ -455,64 +418,23 @@ let curTab = 'bist', notifOn = false, toastT = null;
 
 if ('Notification' in window && Notification.permission === 'granted') notifOn = true;
 
-// ── CORS proxy listesi (Farklı davranış türlerine sahip) ──
-const PROXIES = [
-  {
-    type: 'raw', 
-    // codetabs is currently one of the more reliable public proxies
-    url: u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-  },
-  {
-    type: 'raw',
-    // thingproxy is a great alternative fallback
-    url: u => `https://thingproxy.freeboard.io/fetch/${u}`
-  },
-  {
-    type: 'raw', 
-    // corsproxy.io as a third fallback
-    url: u => `https://corsproxy.io/?${encodeURIComponent(u)}`
-  },
-  {
-    type: 'json-contents', 
-    // Push allorigins to the bottom since it is currently returning 500/522 errors
-    url: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`
-  }
-];
+// ── Proxy ──
+// Worker'ı deploy ettikten sonra aşağıdaki URL'i kendi worker adresinle değiştir.
+// Örnek: 'https://stock-proxy.senkullanicin.workers.dev'
+const WORKER_URL = 'https://stock-proxy.burcufidan51.workers.dev/';
+
+async function fetchWithFallback(targetUrl) {
+  const proxyUrl = WORKER_URL + new URL(targetUrl).pathname + new URL(targetUrl).search;
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error('Proxy hatası: ' + res.status);
+  const data = await res.json();
+  if (!data?.chart?.result?.[0]) throw new Error('Yahoo verisi boş');
+  return data;
+}
 
 function saveToStorage() {
   const basicStocks = stocks.map(s => ({ symbol: s.symbol, name: s.name, exchange: s.exchange }));
   localStorage.setItem('my_tracked_stocks', JSON.stringify(basicStocks));
-}
-
-async function fetchWithFallback(targetUrl) {
-  // Proxy'leri sırayla dene
-  for (const proxy of PROXIES) {
-    try {
-      const res = await fetch(proxy.url(targetUrl));
-      if (!res.ok) continue; // Sunucu yanıt vermezse diğerine geç
-
-      let parsedYahooData;
-      
-      if (proxy.type === 'json-contents') {
-        const data = await res.json();
-        if (!data || !data.contents) continue;
-        parsedYahooData = JSON.parse(data.contents);
-      } else {
-        parsedYahooData = await res.json();
-      }
-      
-      // Gelen veri gerçekten Yahoo formatında mı kontrol et
-      if (parsedYahooData?.chart?.result?.[0]) {
-        return parsedYahooData; // Doğru veriyi bulursan döngüden çık ve döndür
-      }
-    } catch (error) {
-      // JSON parse hatası (HTML gelmesi vs.) olursa sessizce diğer proxy'yi dene
-      continue;
-    }
-  }
-  
-  // Hiçbir proxy başarılı olamazsa tek bir hata fırlat
-  throw new Error('Veri alınamadı');
 }
 
 // ── Veri çekme ──
@@ -562,8 +484,8 @@ function fmtVol(v) {
   return String(v);
 }
 function dirOf(c)      { return c > 0.001 ? 'up' : c < -0.001 ? 'down' : 'neutral'; }
-function chartCol(d)   { return d==='up' ? '#059669' : d==='down' ? '#e11d48' : '#a1a1aa'; }
-function chartBg(d)    { return d==='up' ? 'rgba(5,150,105,.07)' : d==='down' ? 'rgba(225,29,72,.07)' : 'rgba(161,161,170,.05)'; }
+function chartCol(d)   { return d==='up' ? '#16a34a' : d==='down' ? '#dc2626' : '#9ca3af'; }
+function chartBg(d)    { return d==='up' ? 'rgba(22,163,74,.07)' : d==='down' ? 'rgba(220,38,38,.07)' : 'rgba(156,163,175,.05)'; }
 
 // ── Bildirim ──
 function updateBellUI() {
@@ -635,21 +557,12 @@ function makeSkeletonCard(sym, name, exch) {
   return d;
 }
 
-function updateCard(s, prevPrice) {
+function updateCard(s) {
   const d = s.data; if (!d) return;
   const D = dirOf(d.change);
   const arrow = D==='up' ? '↑' : D==='down' ? '↓' : '–';
   const sign  = d.change >= 0 ? '+' : '';
   const card  = document.getElementById('card-' + s.symbol); if (!card) return;
-
-  // Pulse animasyonu: yeni veri geldiğinde yükseliş/düşüş pulse'u
-  if (prevPrice != null && prevPrice !== d.price) {
-    const pulseClass = d.price > prevPrice ? 'pulse-up' : 'pulse-down';
-    card.classList.remove('pulse-up', 'pulse-down');
-    void card.offsetWidth; // reflow — animasyonu resetle
-    card.classList.add(pulseClass);
-    setTimeout(() => card.classList.remove(pulseClass), 1700);
-  }
 
   card.className = 'card ' + D;
   const priceEl = card.querySelector('.c-price');
@@ -723,7 +636,7 @@ async function addStock(sym, name, exch) {
   document.getElementById('grid').appendChild(makeSkeletonCard(sym, name, exch));
   try {
     s.data = await fetchStockPrice(sym, exch);
-    updateCard(s, null); updateSummary(); setUpd();
+    updateCard(s); updateSummary(); setUpd();
   } catch(e) {
     setError(sym, e.message.slice(0, 30));
   }
@@ -734,7 +647,7 @@ async function retryFetch(sym) {
   if (b) { b.textContent = 'Yeniden deneniyor...'; b.className = 'badge loading'; b.onclick = null; }
   try {
     s.data = await fetchStockPrice(sym, s.exchange);
-    updateCard(s, null); updateSummary(); setUpd();
+    updateCard(s); updateSummary(); setUpd();
   } catch(e) { setError(sym, e.message.slice(0, 30)); }
 }
 
@@ -762,7 +675,7 @@ async function refreshAll() {
     if (b) { b.textContent = 'Güncelleniyor...'; b.className = 'badge loading'; }
     try {
       s.data = await fetchStockPrice(s.symbol, s.exchange);
-      updateCard(s, old); maybeNotify(s, old);
+      updateCard(s); maybeNotify(s, old);
     } catch(e) { setError(s.symbol, e.message.slice(0, 30)); }
   }));
 
@@ -777,10 +690,6 @@ function renderUI() {
   document.getElementById('sbar').style.display        = has ? 'grid' : 'none';
   document.getElementById('live-tag').style.display    = has ? 'flex' : 'none';
   document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
-  const ms = document.getElementById('market-status');
-  if (ms) ms.style.display = has ? 'flex' : 'none';
-  if (has) { updateMarketStatus(); scheduleRefresh(); }
-  else { clearTimeout(autoRefreshTimer); }
   updateSummary();
 }
 function updateSummary() {
@@ -854,74 +763,34 @@ function addManual() {
 document.getElementById('m-sym').addEventListener('keydown', e => { if (e.key === 'Enter') addManual(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-// ── OTOMATİK YENİLEME — Akıllı aralık ──
-// BIST: 10:00–18:00 TR (UTC+3), ABD: 16:30–23:00 TR
-// Piyasa açıkken 30sn, kapalıyken 5dk
-
-let autoRefreshTimer = null;
-
-function getMarketStatus() {
-  const now = new Date();
-  // TR saati (UTC+3)
-  const trH = (now.getUTCHours() + 3) % 24;
-  const trM = now.getUTCMinutes();
-  const trMin = trH * 60 + trM;
-  const day = now.getUTCDay(); // 0=Pazar, 6=Cumartesi
-
-  const isWeekday = day >= 1 && day <= 5;
-
-  // BIST: 10:00–18:00 TR
-  const bistOpen = isWeekday && trMin >= 10*60 && trMin < 18*60;
-  // ABD piyasaları: 16:30–23:00 TR
-  const usOpen   = isWeekday && trMin >= 16*60+30 && trMin < 23*60;
-
-  const anyOpen = bistOpen || usOpen;
-  const label = anyOpen
-    ? (bistOpen && usOpen ? 'BIST + ABD AÇIK' : bistOpen ? 'BIST AÇIK' : 'ABD AÇIK')
-    : 'PİYASA KAPALI';
-
-  return { anyOpen, bistOpen, usOpen, label };
-}
-
-function updateMarketStatus() {
-  const { anyOpen, label } = getMarketStatus();
-  const el = document.getElementById('market-status');
-  if (!el || !stocks.length) return;
-  el.textContent = label;
-  el.className = 'market-status ' + (anyOpen ? 'open' : 'closed');
-  el.style.display = 'flex';
-}
-
-function scheduleRefresh() {
-  clearTimeout(autoRefreshTimer);
-  const isModalOpen = document.getElementById('overlay').classList.contains('open');
-  if (isModalOpen || !stocks.length) {
-    autoRefreshTimer = setTimeout(scheduleRefresh, 5000);
-    return;
-  }
-  const { anyOpen } = getMarketStatus();
-  const interval = anyOpen ? 30_000 : 5 * 60_000; // açık: 30sn, kapalı: 5dk
-  autoRefreshTimer = setTimeout(async () => {
-    await refreshAll();
-    updateMarketStatus();
-    scheduleRefresh();
-  }, interval);
-}
-
-// ── Başlat ──
+/// ── Başlat ──
 updateBellUI();
 filterList();
 
+// Sayfa her açıldığında yerel hafızadan kayıtlı hisseleri yükle
 const savedStocks = localStorage.getItem('my_tracked_stocks');
 if (savedStocks) {
   try {
     const parsed = JSON.parse(savedStocks);
-    parsed.forEach(item => addStock(item.symbol, item.name, item.exchange));
-  } catch(e) { console.error('Kayıtlı veriler yüklenemedi:', e); }
+    parsed.forEach(item => {
+      addStock(item.symbol, item.name, item.exchange);
+    });
+  } catch (e) {
+    console.error("Kayıtlı veriler yüklenirken hata oluştu:", e);
+  }
 }
 
-scheduleRefresh();
+// ── OTOMATİK YENİLEME (EKLENEN KISIM) ──
+// Sayfa açık olduğu sürece her 30 saniyede bir (30000 ms) hisseleri otomatik günceller
+setInterval(() => {
+  // Eğer kullanıcı o esnada yeni hisse ekleme modalını açtıysa aramayı bölmemek için yenileme yapmaz
+  const isModalOpen = document.getElementById('overlay').classList.contains('open');
+  if (!isModalOpen) {
+    refreshAll();
+  }
+}, 30000); 
 
+// file:// protokolü uyarısı
 if (location.protocol === 'file:') {
   document.getElementById('file-warn').style.display = 'block';
 }
