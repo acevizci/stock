@@ -396,23 +396,18 @@ function openModal() {
   document.getElementById('m-sym').value      = '';
   document.getElementById('m-name').value     = '';
   document.getElementById('cerr').style.display = 'none';
-  switchTab('bist');
+  curTab = 'bist'; // Güvenlik için tab'ı BIST'e sabitliyoruz
+  showOnlyDiv = false;
+  var btn = document.getElementById('div-filter-btn');
+  if (btn) btn.classList.remove('active');
+  filterList(); // switchTab yerine doğrudan listeyi filtrele
   setTimeout(function() { document.getElementById('search-inp').focus(); }, 60);
 }
 function closeModal() { document.getElementById('overlay').classList.remove('open'); }
 function bgClick(e)   { if (e.target.id === 'overlay') closeModal(); }
 function clearErr()   { document.getElementById('cerr').style.display = 'none'; }
 
-function switchTab(t) {
-  curTab = t;
-  showOnlyDiv = false;
-  var btn = document.getElementById('div-filter-btn');
-  if (btn) btn.classList.remove('active');
-  document.getElementById('tb-bist').className = 'tab' + (t === 'bist' ? ' active' : '');
-  document.getElementById('tb-intl').className = 'tab' + (t === 'intl' ? ' active' : '');
-  document.getElementById('search-inp').value = '';
-  filterList();
-}
+
 
 function toggleDivFilter() {
   showOnlyDiv = !showOnlyDiv;
