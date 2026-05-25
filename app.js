@@ -13,20 +13,6 @@ let BIST_LIST = (() => {
   return [];
 })();
 
-let INTL_LIST = (() => {
-  try {
-    const c = JSON.parse(localStorage.getItem('intl_list') || '[]');
-    if (c.length >= 5 && 'div' in c[0]) return c;
-    localStorage.removeItem('intl_list');
-    sessionStorage.removeItem('intl_list_fetched');
-  } catch (_) {}
-  return [];
-})();
-
-const EXCH_MAP = {
-  NMS:'NASDAQ', NasdaqGS:'NASDAQ', NasdaqGM:'NASDAQ', NasdaqCM:'NASDAQ',
-  NYQ:'NYSE', NYSE:'NYSE', PCX:'NYSE',
-};
 
 // ── State ──
 let stocks = [], charts = {}, histories = {};
@@ -83,42 +69,6 @@ async function fetchBistList() {
   }
 }
 
-async function fetchIntlList() {
-  if (sessionStorage.getItem('intl_list_fetched') === '1') return;
-  try {
-    // FMP'nin tüm hisseleri veren genel listesine istek atıyoruz
-    const res = await fetch(WORKER_URL + '/fmp/stock/list', { signal: AbortSignal.timeout(12000) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    
-    const raw  = await res.json();
-    const allStocks = Array.isArray(raw) ? raw : (raw.stockList || raw.stocks || []);
-    
-    // Gelen devasa listeden sadece NASDAQ ve NYSE olanları filtreleyip ilk 500 tanesini alıyoruz
-    const data = allStocks
-      .filter(q => (q.exchangeShortName === 'NASDAQ' || q.exchangeShortName === 'NYSE') && q.symbol && !q.symbol.includes('.'))
-      .slice(0, 500);
-
-    if (data.length < 5) throw new Error('Yetersiz: ' + data.length);
-    
-    const list = data
-      .map(q => ({
-        s: q.symbol,
-        n: q.name || q.companyName || q.symbol,
-        x: EXCH_MAP[q.exchangeShortName] || (q.exchangeShortName === 'NYSE' ? 'NYSE' : 'NASDAQ'),
-        div: 0 // Temel liste API'sinde temettü verisi genelde gelmez
-      }));
-      
-    if (list.length < 5) throw new Error('Parse sonrasi yetersiz');
-    
-    INTL_LIST = list;
-    localStorage.setItem('intl_list', JSON.stringify(list));
-    sessionStorage.setItem('intl_list_fetched', '1');
-    filterList();
-    console.log('[Hisse] INTL listesi yuklendi: ' + list.length);
-  } catch (err) {
-    console.warn('[Hisse] INTL FMP basarisiz:', err.message);
-  }
-}
 
 // ── Veri cekme ──
 async function fetchStockPrice(symbol, exchange) {
@@ -473,9 +423,7 @@ function toggleDivFilter() {
 
 function filterList() {
   var q   = document.getElementById('search-inp').value.toLowerCase().trim();
-  var raw = curTab === 'bist'
-    ? BIST_LIST.map(function(x) { return Object.assign({}, x, { x: 'BIST' }); })
-    : INTL_LIST;
+var raw = BIST_LIST.map(function(x) { return Object.assign({}, x, { x: 'BIST' }); });
 
   var filtered = showOnlyDiv ? raw.filter(function(x) { return (x.div || 0) > 0; }) : raw;
   if (q) filtered = filtered.filter(function(x) {
@@ -534,7 +482,7 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
 updateBellUI();
 filterList();
 fetchBistList();
-fetchIntlList();
+
 
 var savedStocks = localStorage.getItem('my_tracked_stocks');
 if (savedStocks) {

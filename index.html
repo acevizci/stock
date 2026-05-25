@@ -56,11 +56,7 @@
     </div>
   </div>
 
-  <!-- file:// uyarısı -->
-  <div id="file-warn" style="display:none">
-    <strong>⚠ Dosya olarak açıldı:</strong> Worker proxy <code>file://</code> protokolünde çalışmayabilir.<br>
-    VS Code → <strong>Go Live</strong> veya <code>python -m http.server 8080</code> ile aç.
-  </div>
+
 
   <!-- Empty state -->
   <div class="empty" id="empty-state">
@@ -87,7 +83,7 @@
     </div>
     <div class="tabs">
       <button class="tab active" id="tb-bist" onclick="switchTab('bist')">BIST</button>
-      <button class="tab"        id="tb-intl" onclick="switchTab('intl')">Uluslararası</button>
+    
     </div>
     <div class="s-wrap">
       <i class="ti ti-search"></i>
@@ -109,8 +105,7 @@
              style="flex:1;min-width:100px" oninput="clearErr()" />
       <select class="ci" id="m-exch">
         <option value="BIST">BIST</option>
-        <option value="NASDAQ">NASDAQ</option>
-        <option value="NYSE">NYSE</option>
+       
       </select>
     </div>
     <div class="cerr" id="cerr"></div>
