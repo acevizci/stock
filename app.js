@@ -10,7 +10,11 @@ const BIST_EMERGENCY = [
 let BIST_LIST = (() => {
   try {
     const cached = JSON.parse(localStorage.getItem('bist_list') || '[]');
-    return cached.length >= 5 ? cached : BIST_EMERGENCY;
+    // Eski format kontrolü: div alanı yoksa temizle, screener yeniden çeksin
+    if (cached.length >= 5 && 'div' in cached[0]) return cached;
+    localStorage.removeItem('bist_list');
+    sessionStorage.removeItem('bist_list_fetched');
+    return BIST_EMERGENCY;
   } catch (_) { return BIST_EMERGENCY; }
 })();
 
@@ -59,7 +63,13 @@ async function fetchBistList() {
       .map(q => ({
         s:   q.symbol.replace(/\.IS$/i, ''),
         n:   q.shortName,
-        div: q.trailingAnnualDividendYield || 0,
+        // Yahoo farklı alan adları kullanabiliyor — hepsini dene
+        div: q.trailingAnnualDividendYield
+          || q.dividendYield
+          || (q.trailingAnnualDividendRate && q.regularMarketPrice
+              ? q.trailingAnnualDividendRate / q.regularMarketPrice
+              : 0)
+          || 0,
       }));
 
     if (list.length < 5) throw new Error('Yetersiz sonuç');
@@ -94,7 +104,11 @@ const EXCH_MAP = {
 let INTL_LIST = (() => {
   try {
     const cached = JSON.parse(localStorage.getItem('intl_list') || '[]');
-    return cached.length >= 5 ? cached : INTL_EMERGENCY;
+    // Eski format kontrolü
+    if (cached.length >= 5 && 'div' in cached[0]) return cached;
+    localStorage.removeItem('intl_list');
+    sessionStorage.removeItem('intl_list_fetched');
+    return INTL_EMERGENCY;
   } catch (_) { return INTL_EMERGENCY; }
 })();
 
@@ -131,7 +145,12 @@ async function fetchIntlList() {
         s:   q.symbol,
         n:   q.shortName,
         x:   EXCH_MAP[q.exchange] || 'NASDAQ',
-        div: q.trailingAnnualDividendYield || 0,
+        div: q.trailingAnnualDividendYield
+          || q.dividendYield
+          || (q.trailingAnnualDividendRate && q.regularMarketPrice
+              ? q.trailingAnnualDividendRate / q.regularMarketPrice
+              : 0)
+          || 0,
       }));
 
     if (list.length < 5) throw new Error('Yetersiz sonuç');
