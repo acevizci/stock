@@ -1,0 +1,419 @@
+// ── Hisse Listeleri ──
+const BIST_LIST = [
+  {s:'THYAO',n:'Türk Hava Yolları'},{s:'GARAN',n:'Garanti BBVA'},{s:'ASELS',n:'Aselsan'},
+  {s:'SISE',n:'Şişe Cam'},{s:'EREGL',n:'Ereğli Demir Çelik'},{s:'BIMAS',n:'BİM Mağazaları'},
+  {s:'KCHOL',n:'Koç Holding'},{s:'SAHOL',n:'Sabancı Holding'},{s:'AKBNK',n:'Akbank'},
+  {s:'YKBNK',n:'Yapı Kredi'},{s:'ISCTR',n:'İş Bankası C'},{s:'HALKB',n:'Halkbank'},
+  {s:'VAKBN',n:'Vakıfbank'},{s:'FROTO',n:'Ford Otosan'},{s:'TOASO',n:'Tofaş'},
+  {s:'TUPRS',n:'Tüpraş'},{s:'TCELL',n:'Turkcell'},{s:'PGSUS',n:'Pegasus'},
+  {s:'TAVHL',n:'TAV Havalimanları'},{s:'EKGYO',n:'Emlak Konut GYO'},
+  {s:'ENKAI',n:'Enka İnşaat'},{s:'PETKM',n:'Petkim'},{s:'ARCLK',n:'Arçelik'},
+  {s:'MGROS',n:'Migros Ticaret'},{s:'SOKM',n:'Şok Marketler'},
+  {s:'KOZAL',n:'Koza Altın'},{s:'MAVI',n:'Mavi Giyim'},{s:'LOGO',n:'Logo Yazılım'},
+  {s:'ULKER',n:'Ülker Bisküvi'},{s:'ODAS',n:'Odaş Elektrik'},
+  {s:'AEFES',n:'Anadolu Efes'},{s:'KCAER',n:'Koza Anadolu Metal'},
+  {s:'TTKOM',n:'Türk Telekom'},{s:'TTRAK',n:'Türk Traktör'},
+  {s:'SASA',n:'Sasa Polyester'},{s:'DOHOL',n:'Doğan Holding'},
+];
+const INTL_LIST = [
+  {s:'AAPL',n:'Apple',x:'NASDAQ'},{s:'MSFT',n:'Microsoft',x:'NASDAQ'},
+  {s:'NVDA',n:'NVIDIA',x:'NASDAQ'},{s:'GOOGL',n:'Alphabet',x:'NASDAQ'},
+  {s:'AMZN',n:'Amazon',x:'NASDAQ'},{s:'META',n:'Meta Platforms',x:'NASDAQ'},
+  {s:'TSLA',n:'Tesla',x:'NASDAQ'},{s:'AVGO',n:'Broadcom',x:'NASDAQ'},
+  {s:'ORCL',n:'Oracle',x:'NYSE'},{s:'NFLX',n:'Netflix',x:'NASDAQ'},
+  {s:'JPM',n:'JPMorgan Chase',x:'NYSE'},{s:'V',n:'Visa',x:'NYSE'},
+  {s:'WMT',n:'Walmart',x:'NYSE'},{s:'XOM',n:'ExxonMobil',x:'NYSE'},
+  {s:'JNJ',n:'Johnson & Johnson',x:'NYSE'},{s:'BAC',n:'Bank of America',x:'NYSE'},
+  {s:'BRK.B',n:'Berkshire Hathaway',x:'NYSE'},{s:'GOLD',n:'Barrick Gold',x:'NYSE'},
+  {s:'AMD',n:'AMD',x:'NASDAQ'},{s:'INTC',n:'Intel',x:'NASDAQ'},
+];
+
+// ── State ──
+let stocks = [], charts = {}, histories = {};
+let curTab = 'bist', notifOn = false, toastT = null;
+if ('Notification' in window && Notification.permission === 'granted') notifOn = true;
+
+// ── Proxy ──
+// Worker adresini buraya yaz (Cloudflare Workers)
+const WORKER_URL = 'https://stock-proxy.burcufidan51.workers.dev';
+
+async function fetchWithFallback(targetUrl) {
+  const proxyUrl = WORKER_URL + new URL(targetUrl).pathname + new URL(targetUrl).search;
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error('Proxy hatası: ' + res.status);
+  const data = await res.json();
+  if (!data?.chart?.result?.[0]) throw new Error('Yahoo verisi boş');
+  return data;
+}
+
+function saveToStorage() {
+  const basicStocks = stocks.map(s => ({ symbol: s.symbol, name: s.name, exchange: s.exchange }));
+  localStorage.setItem('my_tracked_stocks', JSON.stringify(basicStocks));
+}
+
+// ── Veri çekme ──
+async function fetchStockPrice(symbol, exchange) {
+  const ticker = exchange === 'BIST' ? symbol + '.IS' : symbol;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`;
+  const data = await fetchWithFallback(url);
+  const result = data?.chart?.result?.[0];
+  if (!result) throw new Error('Sembol bulunamadı');
+  const meta = result.meta;
+  const price = meta.regularMarketPrice;
+  if (!price) throw new Error('Fiyat alınamadı');
+  const prev      = meta.chartPreviousClose || meta.previousClose || price;
+  const change    = +(price - prev).toFixed(4);
+  const changePct = +((change / prev) * 100).toFixed(4);
+  const rawCloses = result.indicators?.quote?.[0]?.close || [];
+  const closes    = rawCloses.filter(v => v != null);
+  return {
+    price, change, changePct,
+    high:     meta.regularMarketDayHigh || price,
+    low:      meta.regularMarketDayLow  || price,
+    volume:   meta.regularMarketVolume  || 0,
+    currency: meta.currency || (exchange === 'BIST' ? 'TRY' : 'USD'),
+    closes,
+  };
+}
+
+// ── Format ──
+function fmt(v, cur) {
+  if (v == null) return '—';
+  return cur === 'TRY'
+    ? v.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ₺'
+    : '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtVol(v) {
+  if (!v) return '—';
+  if (v >= 1e9) return (v/1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+  return String(v);
+}
+function dirOf(c)    { return c > 0.001 ? 'up' : c < -0.001 ? 'down' : 'neutral'; }
+function chartCol(d) { return d==='up' ? '#10b981' : d==='down' ? '#f43f5e' : '#64748b'; }
+function chartBg(d)  { return d==='up' ? 'rgba(16,185,129,.08)' : d==='down' ? 'rgba(244,63,94,.08)' : 'rgba(100,116,139,.05)'; }
+
+// ── Bildirim ──
+function updateBellUI() {
+  const b = document.getElementById('bell-btn');
+  if (!('Notification' in window)) { b.style.opacity='.3'; b.style.pointerEvents='none'; return; }
+  b.className = 'btn btn-icon btn-bell' +
+    (Notification.permission==='denied' ? ' denied' : notifOn ? ' on' : '');
+  b.title = notifOn
+    ? 'Düşüş bildirimleri açık — kapatmak için tıkla'
+    : Notification.permission==='denied'
+    ? 'Tarayıcı ayarlarından izin gerekiyor'
+    : 'Düşüş bildirimlerine izin ver';
+}
+async function toggleNotif() {
+  if (!('Notification' in window)) return;
+  if (notifOn) { notifOn = false; updateBellUI(); return; }
+  if (Notification.permission === 'denied') return;
+  const p = await Notification.requestPermission();
+  notifOn = (p === 'granted');
+  updateBellUI();
+}
+
+// ── Toast ──
+function showToast(sym, name, priceStr, pct) {
+  clearTimeout(toastT);
+  document.getElementById('toast-sym').textContent  = '📉 ' + sym + ' düştü';
+  document.getElementById('toast-body').textContent = name + '\n' + priceStr + '  ▼' + Math.abs(pct).toFixed(2) + '%';
+  document.getElementById('toast').classList.add('show');
+  toastT = setTimeout(() => document.getElementById('toast').classList.remove('show'), 5500);
+}
+function maybeNotify(s, oldPrice) {
+  if (!s.data || !oldPrice || s.data.price >= oldPrice) return;
+  const pct = ((s.data.price - oldPrice) / oldPrice) * 100;
+  const ps  = fmt(s.data.price, s.data.currency);
+  showToast(s.symbol, s.name, ps, pct);
+  // pulse-down animasyonu düşüşte
+  const card = document.getElementById('card-' + s.symbol);
+  if (card) {
+    card.classList.remove('pulse-up', 'pulse-down');
+    void card.offsetWidth;
+    card.classList.add('pulse-down');
+    setTimeout(() => card.classList.remove('pulse-down'), 1900);
+  }
+  if (notifOn && Notification.permission === 'granted') {
+    try {
+      new Notification('📉 ' + s.symbol + ' düştü', {
+        body: s.name + '\n' + ps + '  ▼' + Math.abs(pct).toFixed(2) + '%',
+        tag:  'drop-' + s.symbol,
+      });
+    } catch(e) {}
+  }
+}
+
+// ── Card ──
+function makeSkeletonCard(sym, name, exch) {
+  const d = document.createElement('div');
+  d.className = 'card'; d.id = 'card-' + sym;
+  d.innerHTML = `
+    <div class="c-hdr">
+      <div>
+        <div class="c-sym">${sym}<span class="c-xch">${exch}</span></div>
+        <div class="c-name">${name}</div>
+      </div>
+      <button class="rm-btn" onclick="removeStock('${sym}')" title="Kaldır"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="c-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>
+    <span class="badge loading">Veri çekiliyor...</span>
+    <div class="chart-area"><canvas id="cv-${sym}" aria-label="${sym} fiyat grafiği"></canvas></div>
+    <div class="sep"></div>
+    <div class="c-meta">
+      <div><div class="m-lbl">Yüksek</div><div class="m-val">—</div></div>
+      <div><div class="m-lbl">Düşük</div><div class="m-val">—</div></div>
+      <div><div class="m-lbl">Hacim</div><div class="m-val">—</div></div>
+    </div>`;
+  return d;
+}
+
+function updateCard(s, prevPrice) {
+  const d = s.data; if (!d) return;
+  const D     = dirOf(d.change);
+  const arrow = D==='up' ? '↑' : D==='down' ? '↓' : '–';
+  const sign  = d.change >= 0 ? '+' : '';
+  const card  = document.getElementById('card-' + s.symbol); if (!card) return;
+
+  // Pulse on refresh price change
+  if (typeof prevPrice === 'number' && prevPrice !== d.price) {
+    const pc = d.price > prevPrice ? 'pulse-up' : 'pulse-down';
+    card.classList.remove('pulse-up', 'pulse-down');
+    void card.offsetWidth;
+    card.classList.add(pc);
+    setTimeout(() => card.classList.remove(pc), 1900);
+  }
+
+  card.className = 'card ' + D;
+  const priceEl = card.querySelector('.c-price');
+  const badgeEl = card.querySelector('.badge');
+  const vals    = card.querySelectorAll('.m-val');
+
+  if (priceEl) priceEl.textContent = fmt(d.price, d.currency);
+  if (badgeEl) {
+    badgeEl.textContent = `${arrow} ${Math.abs(d.changePct).toFixed(2)}% (${sign}${d.change.toFixed(2)})`;
+    badgeEl.className   = 'badge ' + D;
+    badgeEl.onclick     = null;
+  }
+  if (vals[0]) vals[0].textContent = fmt(d.high, d.currency);
+  if (vals[1]) vals[1].textContent = fmt(d.low,  d.currency);
+  if (vals[2]) vals[2].textContent = fmtVol(d.volume);
+
+  // Grafik — gerçek Yahoo verisi
+  const hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
+  histories[s.symbol] = hist;
+  const cc = chartCol(D), cb = chartBg(D);
+
+  if (charts[s.symbol]) {
+    const ch = charts[s.symbol];
+    ch.data.labels                       = hist.map(() => '');
+    ch.data.datasets[0].data             = hist;
+    ch.data.datasets[0].borderColor      = cc;
+    ch.data.datasets[0].backgroundColor  = cb;
+    ch.update('none');
+  } else {
+    const ctx = document.getElementById('cv-' + s.symbol);
+    if (ctx) {
+      charts[s.symbol] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: hist.map(() => ''),
+          datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: { x: { display: false }, y: { display: false, grace: '8%' } },
+        },
+      });
+    }
+  }
+}
+
+function setError(sym, msg) {
+  const card  = document.getElementById('card-' + sym); if (!card) return;
+  card.className = 'card error';
+  const badge = card.querySelector('.badge');
+  const price = card.querySelector('.c-price');
+  if (price) price.textContent = '—';
+  if (badge) {
+    badge.textContent = '⚠ ' + (msg || 'Hata') + ' — tekrar dene';
+    badge.className   = 'badge error';
+    badge.onclick     = () => retryFetch(sym);
+  }
+}
+
+// ── Ekle / Kaldır / Yenile ──
+async function addStock(sym, name, exch) {
+  if (stocks.find(s => s.symbol === sym)) return;
+  histories[sym] = [];
+  const s = { symbol: sym, name, exchange: exch, data: null };
+  stocks.push(s);
+  saveToStorage();
+  closeModal(); renderUI();
+  document.getElementById('grid').appendChild(makeSkeletonCard(sym, name, exch));
+  try {
+    s.data = await fetchStockPrice(sym, exch);
+    updateCard(s, null); updateSummary(); setUpd();
+  } catch(e) {
+    setError(sym, e.message.slice(0, 30));
+  }
+}
+
+async function retryFetch(sym) {
+  const s = stocks.find(x => x.symbol === sym); if (!s) return;
+  const b = document.querySelector('#card-' + sym + ' .badge');
+  if (b) { b.textContent = 'Yeniden deneniyor...'; b.className = 'badge loading'; b.onclick = null; }
+  try {
+    s.data = await fetchStockPrice(sym, s.exchange);
+    updateCard(s, null); updateSummary(); setUpd();
+  } catch(e) { setError(sym, e.message.slice(0, 30)); }
+}
+
+function removeStock(sym) {
+  if (charts[sym]) { charts[sym].destroy(); delete charts[sym]; }
+  delete histories[sym];
+  stocks = stocks.filter(s => s.symbol !== sym);
+  saveToStorage();
+  const c = document.getElementById('card-' + sym); if (c) c.remove();
+  renderUI();
+}
+
+async function refreshAll() {
+  if (!stocks.length) return;
+  const btn  = document.getElementById('ref-btn');
+  const icon = document.getElementById('ref-icon');
+  btn.disabled = true;
+  icon.style.animation = 'spin 1s linear infinite';
+
+  await Promise.all(stocks.map(async s => {
+    const old = s.data?.price;
+    const b   = document.querySelector('#card-' + s.symbol + ' .badge');
+    if (b) { b.textContent = 'Güncelleniyor...'; b.className = 'badge loading'; }
+    try {
+      s.data = await fetchStockPrice(s.symbol, s.exchange);
+      updateCard(s, old); maybeNotify(s, old);
+    } catch(e) { setError(s.symbol, e.message.slice(0, 30)); }
+  }));
+
+  updateSummary(); setUpd();
+  btn.disabled = false; icon.style.animation = '';
+}
+
+// ── UI ──
+function renderUI() {
+  const has = stocks.length > 0;
+  document.getElementById('empty-state').style.display = has ? 'none'        : 'flex';
+  document.getElementById('sbar').style.display        = has ? 'grid'        : 'none';
+  document.getElementById('live-tag').style.display    = has ? 'flex'        : 'none';
+  document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
+  updateSummary();
+}
+function updateSummary() {
+  const wd = stocks.filter(s => s.data);
+  document.getElementById('sc-t').textContent = stocks.length;
+  document.getElementById('sc-u').textContent = wd.filter(s => s.data.change >= 0).length;
+  document.getElementById('sc-d').textContent = wd.filter(s => s.data.change < 0).length;
+}
+function setUpd() {
+  document.getElementById('upd').textContent = new Date().toLocaleTimeString('tr-TR');
+}
+
+// ── Modal ──
+function openModal() {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('search-inp').value = '';
+  document.getElementById('m-sym').value      = '';
+  document.getElementById('m-name').value     = '';
+  document.getElementById('cerr').style.display = 'none';
+  switchTab('bist');
+  setTimeout(() => document.getElementById('search-inp').focus(), 60);
+}
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+function bgClick(e)   { if (e.target.id === 'overlay') closeModal(); }
+function clearErr()   { document.getElementById('cerr').style.display = 'none'; }
+
+function switchTab(t) {
+  curTab = t;
+  document.getElementById('tb-bist').className = 'tab' + (t === 'bist' ? ' active' : '');
+  document.getElementById('tb-intl').className = 'tab' + (t === 'intl' ? ' active' : '');
+  document.getElementById('search-inp').value = '';
+  filterList();
+}
+
+function filterList() {
+  const q    = document.getElementById('search-inp').value.toLowerCase().trim();
+  const raw  = curTab === 'bist' ? BIST_LIST.map(x => ({...x, x:'BIST'})) : INTL_LIST;
+  const list = q ? raw.filter(x => x.s.toLowerCase().includes(q) || x.n.toLowerCase().includes(q)) : raw;
+  const el   = document.getElementById('s-list');
+  el.innerHTML = '';
+  if (!list.length) {
+    el.innerHTML = '<div style="padding:18px;text-align:center;font-size:12px;color:var(--muted)">Sonuç bulunamadı</div>';
+    return;
+  }
+  list.forEach(item => {
+    const added = !!stocks.find(s => s.symbol === item.s);
+    const div   = document.createElement('div');
+    div.className = 's-item' + (added ? ' added' : '');
+    div.innerHTML = `
+      <div>
+        <div class="s-sym">${item.s}</div>
+        <div class="s-name">${item.n}</div>
+      </div>
+      <i class="ti ti-${added ? 'check' : 'plus'}" style="font-size:15px;color:${added ? 'var(--up)' : 'var(--muted)'}"></i>`;
+    if (!added) div.onclick = () => addStock(item.s, item.n, item.x || 'BIST');
+    el.appendChild(div);
+  });
+}
+
+function addManual() {
+  const sym  = document.getElementById('m-sym').value.trim().toUpperCase();
+  const name = document.getElementById('m-name').value.trim() || sym;
+  const exch = document.getElementById('m-exch').value;
+  const err  = document.getElementById('cerr');
+  if (!sym)  { err.textContent = 'Sembol giriniz.'; err.style.display = 'block'; return; }
+  if (stocks.find(s => s.symbol === sym)) { err.textContent = 'Bu sembol zaten listede.'; err.style.display = 'block'; return; }
+  addStock(sym, name, exch);
+}
+
+document.getElementById('m-sym').addEventListener('keydown', e => { if (e.key === 'Enter') addManual(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Başlat ──
+updateBellUI();
+filterList();
+
+// LocalStorage'dan kayıtlı hisseleri yükle
+const savedStocks = localStorage.getItem('my_tracked_stocks');
+if (savedStocks) {
+  try {
+    JSON.parse(savedStocks).forEach(item => addStock(item.symbol, item.name, item.exchange));
+  } catch(e) { console.error('Kayıtlı veriler yüklenemedi:', e); }
+}
+
+// ── Otomatik yenileme — piyasa saatine göre akıllı aralık ──
+// BIST: 10:00–18:00 TR (UTC+3) | ABD: 16:30–23:00 TR
+function getMarketOpen() {
+  const now = new Date();
+  const trMin = ((now.getUTCHours() + 3) % 24) * 60 + now.getUTCMinutes();
+  const day   = now.getUTCDay(); // 0=Pazar
+  const wd    = day >= 1 && day <= 5;
+  return wd && ((trMin >= 600 && trMin < 1080) || (trMin >= 990 && trMin < 1380));
+}
+
+let refreshTimer = null;
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  const isModalOpen = document.getElementById('overlay').classList.contains('open');
+  if (isModalOpen || !stocks.length) { refreshTimer = setTimeout(scheduleRefresh, 5000); return; }
+  const interval = getMarketOpen() ? 30_000 : 5 * 60_000;
+  refreshTimer = setTimeout(async () => { await refreshAll(); scheduleRefresh(); }, interval);
+}
+scheduleRefresh();
+
+// file:// uyarısı
+if (location.protocol === 'file:') {
+  document.getElementById('file-warn').style.display = 'block';
+}

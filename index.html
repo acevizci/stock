@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hisse Takibi</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/dist/tabler-icons.min.css" />
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="h-brand">
+      <div class="h-logo"><i class="ti ti-trending-up"></i></div>
+      <span class="h-title">Hisse Takibi</span>
+      <div class="live-tag" id="live-tag"><div class="live-dot"></div>CANLI</div>
+    </div>
+    <div class="h-right">
+      <span class="upd-txt" id="upd"></span>
+      <button class="btn btn-icon btn-bell" id="bell-btn" onclick="toggleNotif()" title="Düşüş bildirimleri">
+        <i class="ti ti-bell"></i>
+      </button>
+      <button class="btn" id="ref-btn" onclick="refreshAll()" style="display:none">
+        <i class="ti ti-refresh" id="ref-icon"></i> Yenile
+      </button>
+      <button class="btn btn-primary" onclick="openModal()">
+        <i class="ti ti-plus"></i> Hisse Ekle
+      </button>
+    </div>
+  </div>
+
+  <!-- Summary bar -->
+  <div class="sbar" id="sbar" style="display:none">
+    <div class="sc">
+      <div class="sc-l">Toplam</div>
+      <div class="sc-v" id="sc-t">0</div>
+    </div>
+    <div class="sc">
+      <div class="sc-l">Yükselen</div>
+      <div class="sc-v" id="sc-u" style="color:var(--up)">0</div>
+    </div>
+    <div class="sc">
+      <div class="sc-l">Düşen</div>
+      <div class="sc-v" id="sc-d" style="color:var(--dn)">0</div>
+    </div>
+  </div>
+
+  <!-- file:// uyarısı -->
+  <div id="file-warn" style="display:none">
+    <strong>⚠ Dosya olarak açıldı:</strong> Worker proxy <code>file://</code> protokolünde çalışmayabilir.<br>
+    VS Code → <strong>Go Live</strong> veya <code>python -m http.server 8080</code> ile aç.
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty" id="empty-state">
+    <div class="empty-icon"><i class="ti ti-chart-candle"></i></div>
+    <div class="empty-t">Takip listesi boş</div>
+    <div class="empty-s">Hisse Ekle butonuyla<br>takip başlatabilirsin.</div>
+  </div>
+
+  <!-- Stock grid -->
+  <div class="grid" id="grid"></div>
+
+</div><!-- /app-shell -->
+
+<!-- Hisse ekleme modalı -->
+<div class="overlay" id="overlay" onclick="bgClick(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title">Hisse Ekle</span>
+      <button class="modal-x" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="info-note">
+      <i class="ti ti-info-circle"></i>
+      Veriler Yahoo Finance'den gerçek zamanlı çekilmektedir.
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tb-bist" onclick="switchTab('bist')">BIST</button>
+      <button class="tab"        id="tb-intl" onclick="switchTab('intl')">Uluslararası</button>
+    </div>
+    <div class="s-wrap">
+      <i class="ti ti-search"></i>
+      <input class="s-inp" id="search-inp" type="text"
+             placeholder="Sembol veya şirket adı..."
+             oninput="filterList()" autocomplete="off" />
+    </div>
+    <div class="s-list" id="s-list"></div>
+    <div class="divider">veya manuel gir</div>
+    <div class="m-row">
+      <input class="ci" id="m-sym"  type="text" placeholder="Sembol"
+             style="width:95px" maxlength="12" oninput="clearErr()" />
+      <input class="ci" id="m-name" type="text" placeholder="Şirket adı"
+             style="flex:1;min-width:100px" oninput="clearErr()" />
+      <select class="ci" id="m-exch">
+        <option value="BIST">BIST</option>
+        <option value="NASDAQ">NASDAQ</option>
+        <option value="NYSE">NYSE</option>
+      </select>
+    </div>
+    <div class="cerr" id="cerr"></div>
+    <div class="m-footer">
+      <button class="btn"         onclick="closeModal()">Vazgeç</button>
+      <button class="btn btn-primary" onclick="addManual()">Ekle</button>
+    </div>
+  </div>
+</div>
+
+<!-- Düşüş toast bildirimi -->
+<div class="toast" id="toast">
+  <button class="toast-close" onclick="this.parentElement.classList.remove('show')">
+    <i class="ti ti-x"></i>
+  </button>
+  <div class="toast-sym"  id="toast-sym"></div>
+  <div class="toast-body" id="toast-body"></div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+<!-- App logic -->
+<script src="app.js"></script>
+
+</body>
+</html>
