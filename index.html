@@ -427,52 +427,24 @@ const PROXIES = [
 ];
 
 async function fetchWithFallback(targetUrl) {
-  let lastErr = null;
+  try {
+    const res = await fetch(PROXIES[0](targetUrl));
+    const data = await res.json();
 
-  for (const makeUrl of PROXIES) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(makeUrl(targetUrl), {
-        signal: controller.signal
-      });
-
-      clearTimeout(timeout);
-
-      if (!res.ok) {
-        continue;
+    // AllOrigins /get endpoint'i veriyi contents içinde string olarak döner
+    if (data && data.contents) {
+      const parsedYahooData = JSON.parse(data.contents);
+      
+      // Yahoo response doğrulaması
+      if (parsedYahooData?.chart?.result?.[0]) {
+        return parsedYahooData;
       }
-
-      const text = await res.text();
-
-      // HTML / rate limit response filtrele
-      if (
-        !text ||
-        text.startsWith('<') ||
-        text.includes('Too Many Requests') ||
-        text.includes('Error')
-      ) {
-        continue;
-      }
-
-      try {
-        const json = JSON.parse(text);
-
-        // Yahoo response doğrulama
-        if (json?.chart?.result?.[0]) {
-          return json;
-        }
-      } catch {
-        continue;
-      }
-
-    } catch {
-      continue;
     }
+    throw new Error('Geçersiz veri formatı');
+  } catch (error) {
+    console.error("Proxy çekim hatası:", error);
+    throw new Error('Veri alınamadı');
   }
-
-  throw new Error('Veri alınamadı');
 }
 
 // ── Veri çekme ──
