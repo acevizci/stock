@@ -119,16 +119,35 @@ async function fetchStockPrice(symbol, exchange) {
   const change    = +(price - prev).toFixed(4);
   const changePct = +((change / prev) * 100).toFixed(4);
 
-  const q       = result.indicators?.quote?.[0] || {};
-  const closes  = (q.close  || []).filter(v => v != null);
-  const highs   = (q.high   || []).filter(v => v != null);
-  const lows    = (q.low    || []).filter(v => v != null);
-  const volumes = (q.volume || []).filter(v => v != null);
+  const q = result.indicators?.quote?.[0] || {};
 
-  const yesterday = highs.length >= 2 ? {
-    high:   highs[highs.length - 2],
-    low:    lows[lows.length - 2],
-    volume: volumes[volumes.length - 2],
+  // Her dizi ayrı ayrı filtrelenirse farklı uzunluklarda kalır ve
+  // "dünkü" indeks (length - 2) farklı güne denk gelebilir.
+  // Çözüm: tüm OHLCV değerlerini aynı indeks üzerinden hizalı tut,
+  // yalnızca close'u dolu olan satırları koru.
+  const rawClose  = q.close  || [];
+  const rawHigh   = q.high   || [];
+  const rawLow    = q.low    || [];
+  const rawVolume = q.volume || [];
+
+  const aligned = rawClose
+    .map((c, i) => ({
+      close:  c,
+      high:   rawHigh[i]   ?? null,
+      low:    rawLow[i]    ?? null,
+      volume: rawVolume[i] ?? null,
+    }))
+    .filter(d => d.close != null);
+
+  const closes  = aligned.map(d => d.close);
+  const highs   = aligned.map(d => d.high);
+  const lows    = aligned.map(d => d.low);
+  const volumes = aligned.map(d => d.volume);
+
+  const yesterday = aligned.length >= 2 ? {
+    high:   aligned[aligned.length - 2].high,
+    low:    aligned[aligned.length - 2].low,
+    volume: aligned[aligned.length - 2].volume,
   } : null;
 
   // Temettü — meta alanlarini dene
@@ -216,13 +235,7 @@ function maybeNotify(s, oldPrice) {
   const pct = ((s.data.price - oldPrice) / oldPrice) * 100;
   const ps  = fmt(s.data.price, s.data.currency);
   showToast(s.symbol, s.name, ps, pct);
-  const card = document.getElementById('card-' + s.symbol);
-  if (card) {
-    card.classList.remove('pulse-up', 'pulse-down');
-    void card.offsetWidth;
-    card.classList.add('pulse-down');
-    setTimeout(() => card.classList.remove('pulse-down'), 1900);
-  }
+  // Pulse animasyonu updateCard tarafından yönetilir — burada tekrar eklenmez.
   if (notifOn && Notification.permission === 'granted') {
     try { new Notification(s.symbol + ' dustu', { body: s.name + '\n' + ps, tag: 'drop-' + s.symbol }); }
     catch (e) {}
@@ -263,6 +276,10 @@ function updateCard(s, prevPrice) {
   const card  = document.getElementById('card-' + s.symbol);
   if (!card) return;
 
+  // Önce temel class'ı set et, sonra pulse ekle —
+  // aksi halde aşağıdaki `card.className = 'card ' + D` pulse'u siler.
+  card.className = 'card ' + D;
+
   // Pulse
   if (typeof prevPrice === 'number' && prevPrice !== d.price) {
     const pc = d.price > prevPrice ? 'pulse-up' : 'pulse-down';
@@ -271,8 +288,6 @@ function updateCard(s, prevPrice) {
     card.classList.add(pc);
     setTimeout(() => card.classList.remove(pc), 1900);
   }
-
-  card.className = 'card ' + D;
 
   const priceEl  = card.querySelector('.c-price');
   const badgesEl = card.querySelector('.c-badges');
@@ -446,7 +461,12 @@ function openModal() {
   filterList(); // switchTab yerine doğrudan listeyi filtrele
   setTimeout(function() { document.getElementById('search-inp').focus(); }, 60);
 }
-function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  // Modal kapanır kapanmaz zamanlayıcıyı yeniden başlat;
+  // aksi halde 5 saniyelik polling döngüsü bitmeden yenileme yapılmaz.
+  scheduleRefresh();
+}
 function bgClick(e)   { if (e.target.id === 'overlay') closeModal(); }
 function clearErr()   { document.getElementById('cerr').style.display = 'none'; }
 
@@ -537,7 +557,8 @@ function getMarketOpen() {
   var trMin = ((now.getUTCHours() + 3) % 24) * 60 + now.getUTCMinutes();
   var day   = now.getUTCDay();
   var wd    = day >= 1 && day <= 5;
-  return wd && ((trMin >= 600 && trMin < 1080) || (trMin >= 990 && trMin < 1380));
+  // BIST: 10:00–18:00 TR (UTC+3) → dakika 600–1080
+  return wd && (trMin >= 600 && trMin < 1080);
 }
 
 var refreshTimer = null;
@@ -550,6 +571,5 @@ function scheduleRefresh() {
 }
 scheduleRefresh();
 
-if (location.protocol === 'file:') {
-  document.getElementById('file-warn').style.display = 'block';
-}
+var fileWarnEl = document.getElementById('file-warn');
+if (fileWarnEl) fileWarnEl.style.display = 'block';
