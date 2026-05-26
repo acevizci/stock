@@ -777,6 +777,7 @@ function updateCard(s, prevPrice) {
       }
     }
   }
+} // ── updateCard sonu ──
 
 function setError(sym, msg) {
   var card=document.getElementById('card-'+sym); if (!card) return;
