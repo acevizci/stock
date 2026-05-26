@@ -527,10 +527,141 @@ body {
 }
 .note-sector-row { margin-bottom: 8px; }
 
-/* ── Responsive ── */
-@media (max-width: 560px) {
-  .app-shell { padding: 1.25rem 1rem 3rem; }
-  .sc-v { font-size: 24px; }
-  .h-title { font-size: 15px; }
-  .card { border-radius: var(--r-lg); }
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — Üç kırılım noktası
+   640px: geniş mobil / küçük tablet
+   480px: portrait telefon
+   360px: çok küçük telefon
+═══════════════════════════════════════════════ */
+
+/* ── Dokunmatik: hover transform takılmasını önle ── */
+@media (hover: none) {
+  .card:hover { transform: none; box-shadow: none; }
+  .sc:hover   { transform: none; }
+}
+
+/* ── Dokunma hedefi boşluğu (tap highlight kaldır) ── */
+button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+
+/* ──────────────────────────────────────────────
+   640px — Geniş mobil / küçük tablet
+────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .app-shell { padding: 1rem 0.875rem 4rem; }
+
+  /* Header */
+  .hdr        { margin-bottom: 1.25rem; padding-bottom: 1rem; gap: 8px; }
+  .h-title    { font-size: 15px; }
+  .h-right    { gap: 5px; }
+  .upd-txt    { display: none; }          /* güncelleme saati mobilde gereksiz */
+  .live-tag   { padding: 3px 8px; font-size: 9px; }
+
+  /* Butonlar */
+  .btn        { padding: 8px 11px; font-size: 12px; gap: 5px; }
+  .btn-icon   { padding: 8px 10px; }
+
+  /* "Yenile" ve "CSV" metinlerini gizle, sadece ikon göster */
+  #ref-btn    { font-size: 0; padding: 8px 11px; }
+  #ref-btn i  { font-size: 14px; }
+  #export-btn { font-size: 0; padding: 8px 11px; }
+  #export-btn i { font-size: 14px; }
+
+  /* Sort bar — yatay kaydırma */
+  .sort-bar  { padding: 5px 8px; gap: 6px; margin-bottom: 10px; }
+  .sort-lbl  { display: none; }
+  .sort-pills {
+    overflow-x: auto; flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 1px;
+  }
+  .sort-pills::-webkit-scrollbar { display: none; }
+  .sort-pill  { padding: 5px 9px; white-space: nowrap; flex-shrink: 0; }
+
+  /* Dokunma hedeflerini büyüt (min 40px) */
+  .card-action-btn { padding: 8px 9px; font-size: 14px; }
+  .rm-btn          { padding: 8px 10px; }
+
+  /* Kart */
+  .card    { border-radius: var(--r-lg); padding: 1rem 1.125rem 0.875rem; }
+  .c-price { font-size: 26px; }
+  .sc-v    { font-size: 22px; }
+}
+
+/* ──────────────────────────────────────────────
+   480px — Portrait telefon
+────────────────────────────────────────────── */
+@media (max-width: 480px) {
+
+  /* Summary bar */
+  .sc   { padding: 0.75rem 1rem; }
+  .sc-l { font-size: 9px; letter-spacing: .07em; }
+  .sc-v { font-size: 20px; }
+
+  /* Kart */
+  .card    { padding: 0.875rem 1rem 0.75rem; }
+  .c-price { font-size: 24px; }
+  .grid    { gap: 8px; }
+
+  /* Şirket adı + sektör tag taşmasın */
+  .c-hdr > div:first-child { min-width: 0; }
+  .c-name {
+    white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; max-width: 55vw;
+  }
+
+  /* 4 sütunlu fundamentals → 2×2 grid */
+  .c-meta2 { grid-template-columns: repeat(2, 1fr); row-gap: 10px; }
+
+  /* Temettü detay satırı wrap */
+  .div-detail { flex-wrap: wrap; gap: 4px; }
+
+  /* Toast — ekrana tam yapış */
+  .toast {
+    left: 0.75rem; right: 0.75rem;
+    width: auto; bottom: 0.75rem;
+  }
+
+  /* Modal */
+  .modal { padding: 1.125rem; gap: 10px; }
+  .s-list { max-height: 160px; }
+
+  /* Modal form row — dikey stack */
+  .m-row              { flex-direction: column; }
+  .m-row .ci          { width: 100% !important; flex: 1 1 100%; }
+
+  /* Panel formları — dikey stack */
+  .port-form-row        { flex-direction: column; }
+  .port-form-row .port-ci { width: 100% !important; }
+  .tgt-field            { min-width: 0; }
+
+  /* Panel kart footer butonları */
+  .panel-footer { justify-content: stretch; }
+  .panel-footer .btn { flex: 1; justify-content: center; }
+}
+
+/* ──────────────────────────────────────────────
+   360px — Çok küçük telefon
+────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .app-shell { padding: 0.875rem 0.75rem 4rem; }
+  .h-title   { font-size: 13px; }
+  .h-logo    { width: 32px; height: 32px; border-radius: 8px; }
+  .h-logo i  { font-size: 16px; }
+
+  .c-price { font-size: 22px; }
+  .sc-v    { font-size: 18px; }
+  .sc      { padding: 0.625rem 0.75rem; }
+
+  /* Kart action butonları — gap küçült */
+  .c-hdr-actions   { gap: 3px; }
+  .card-action-btn { padding: 7px 8px; }
+  .rm-btn          { padding: 7px 8px; }
+
+  /* Şirket adı daha kısa */
+  .c-name { max-width: 48vw; }
+
+  /* Fiyat meta col küçük */
+  .m-val  { font-size: 11px; }
+  .m-prev { font-size: 10px; }
 }
