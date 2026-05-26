@@ -252,44 +252,159 @@ function checkTargetAlerts(s, oldPrice) {
 // ── USD/TRY ──
 async function fetchUsdTryRate() {
   try {
-    var data=await fetchWithFallback('https://query1.finance.yahoo.com/v8/finance/chart/USDTRY=X?interval=1d&range=1mo');
-    var result=data?.chart?.result?.[0]; if (!result) return;
-    var meta=result.meta, price=meta.regularMarketPrice; if (!price) return;
-    var prev=meta.chartPreviousClose||meta.previousClose||price;
-    var q=result.indicators?.quote?.[0]||{};
-    usdtryRate={price:price,changePct:((price-prev)/prev)*100,closes:(q.close||[]).filter(v=>v!=null)};
+    var data   = await fetchWithFallback('https://query1.finance.yahoo.com/v8/finance/chart/USDTRY=X?interval=1d&range=1mo');
+    var result = data?.chart?.result?.[0]; if (!result) return;
+    var meta   = result.meta, price = meta.regularMarketPrice; if (!price) return;
+    var prev   = meta.chartPreviousClose || meta.previousClose || price;
+    var q      = result.indicators?.quote?.[0] || {};
+    var closes = (q.close  || []).filter(v => v != null);
+    var highs  = (q.high   || []).filter(v => v != null);
+    var lows   = (q.low    || []).filter(v => v != null);
+
+    usdtryRate = {
+      price,
+      change:     price - prev,
+      changePct:  ((price - prev) / prev) * 100,
+      dayHigh:    meta.regularMarketDayHigh  || (highs.length  ? highs[highs.length-1]   : null),
+      dayLow:     meta.regularMarketDayLow   || (lows.length   ? lows[lows.length-1]     : null),
+      monthHigh:  highs.length  ? Math.max.apply(null, highs)  : null,
+      monthLow:   lows.length   ? Math.min.apply(null, lows)   : null,
+      weekChange: closes.length >= 6
+        ? ((price - closes[closes.length - 6]) / closes[closes.length - 6]) * 100
+        : null,
+      closes,
+    };
     updateUsdTryCard();
-    stocks.forEach(s=>{if(s.data) updatePortfolioPanel(s.symbol,s.data.price,s.data.currency);});
-  } catch(e){console.warn('[USD/TRY]',e.message);}
+    stocks.forEach(s => { if (s.data) updatePortfolioPanel(s.symbol, s.data.price, s.data.currency); });
+  } catch(e) { console.warn('[USD/TRY]', e.message); }
 }
 function makeUsdTrySkeletonCard() {
-  var d=document.createElement('div'); d.className='card kur-card'; d.id='card-USDTRY';
-  d.innerHTML=
-    '<div class="c-hdr"><div><div class="c-sym">USD<span class="c-xch">TRY</span></div><div class="c-name">Döviz Kuru</div></div>'+
-    '<div class="live-dot" style="flex-shrink:0;margin-top:4px"></div></div>'+
-    '<div class="c-price" id="kur-price"><div class="skel-box" style="width:120px;height:28px;border-radius:5px"></div></div>'+
-    '<div class="c-badges" id="kur-badges"><span class="badge loading">Yükleniyor...</span></div>'+
-    '<div class="chart-area" id="chart-area-USDTRY"><canvas id="cv-USDTRY" aria-label="USD/TRY grafik"></canvas></div>'+
-    '<div class="sep"></div>'+
-    '<div class="kur-port" id="kur-port" style="display:none"><div class="m-lbl" style="margin-bottom:5px">Portföy toplam (USD)</div><div class="kur-port-val" id="kur-port-val">-</div></div>';
+  var d = document.createElement('div');
+  d.className = 'card kur-card'; d.id = 'card-USDTRY';
+  d.innerHTML =
+    '<div class="c-hdr">' +
+      '<div>' +
+        '<div class="c-sym">USD <span class="c-xch">TRY</span></div>' +
+        '<div class="c-name">Döviz Kuru</div>' +
+      '</div>' +
+      '<div class="live-dot" style="flex-shrink:0;margin-top:4px"></div>' +
+    '</div>' +
+    '<div class="c-price" id="kur-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>' +
+    '<div class="c-badges" id="kur-badges"><span class="badge loading">Yükleniyor...</span></div>' +
+    '<div class="chart-area" id="chart-area-USDTRY"><canvas id="cv-USDTRY" aria-label="USD/TRY grafik"></canvas></div>' +
+    '<div class="sep"></div>' +
+    // Günlük yüksek / düşük / değişim
+    '<div class="c-meta" id="kur-meta">' +
+      '<div class="m-col"><div class="m-lbl">Günlük Yük</div><div class="m-val" id="kur-day-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Günlük Düş</div><div class="m-val" id="kur-day-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Değişim</div><div class="m-val" id="kur-change">-</div></div>' +
+    '</div>' +
+    '<div class="sep"></div>' +
+    // Aylık yüksek / düşük / haftalık değişim
+    '<div class="c-meta" id="kur-meta2">' +
+      '<div class="m-col"><div class="m-lbl">1A Yüksek</div><div class="m-val" id="kur-mo-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">1A Düşük</div><div class="m-val" id="kur-mo-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Haftalık</div><div class="m-val" id="kur-wk-chg">-</div></div>' +
+    '</div>' +
+    // Portföy USD değeri (portföy varsa göster)
+    '<div class="kur-port" id="kur-port" style="display:none">' +
+      '<div class="sep"></div>' +
+      '<div class="kur-port-row">' +
+        '<div class="m-lbl">Portföy (USD)</div>' +
+        '<div class="kur-port-val" id="kur-port-val">-</div>' +
+      '</div>' +
+    '</div>';
   return d;
 }
 function updateUsdTryCard() {
   if (!usdtryRate) return;
-  var priceEl=document.getElementById('kur-price'), badgesEl=document.getElementById('kur-badges'); if (!priceEl) return;
-  var rate=usdtryRate.price, pct=usdtryRate.changePct, D=pct>0.01?'up':pct<-0.01?'down':'neutral';
-  var card=document.getElementById('card-USDTRY'); if (card) card.className='card kur-card '+D;
-  priceEl.textContent=rate.toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4})+' TL';
-  if (badgesEl){var arrow=D==='up'?'+':D==='down'?'-':'';badgesEl.innerHTML='<span class="badge '+D+'">'+arrow+' '+Math.abs(pct).toFixed(2)+'%</span>';}
-  var hist=usdtryRate.closes; if (hist.length) {
-    var cc=chartCol(D),cb=chartBg(D);
-    if (charts['USDTRY']){var ch=charts['USDTRY'];ch.data.labels=hist.map(()=>'');ch.data.datasets[0].data=hist;ch.data.datasets[0].borderColor=cc;ch.data.datasets[0].backgroundColor=cb;ch.update('none');}
-    else {var ctx=document.getElementById('cv-USDTRY');if(ctx){charts['USDTRY']=new Chart(ctx,{type:'line',data:{labels:hist.map(()=>''),datasets:[{data:hist,borderColor:cc,borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:cb,tension:0.4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false,grace:'8%'}}}});}}
+  var priceEl  = document.getElementById('kur-price');
+  var badgesEl = document.getElementById('kur-badges');
+  if (!priceEl) return;
+
+  var r   = usdtryRate;
+  var D   = r.changePct > 0.01 ? 'up' : r.changePct < -0.01 ? 'down' : 'neutral';
+  var card = document.getElementById('card-USDTRY');
+  if (card) card.className = 'card kur-card ' + D;
+
+  // Ana fiyat
+  priceEl.textContent = r.price.toLocaleString('tr-TR', { minimumFractionDigits:4, maximumFractionDigits:4 }) + ' TL';
+
+  // Değişim badge
+  if (badgesEl) {
+    var arrow  = D === 'up' ? '+' : D === 'down' ? '-' : '';
+    var chgTxt = arrow + ' ' + Math.abs(r.changePct).toFixed(2) + '%';
+    var chgAmt = (r.change >= 0 ? '+' : '') + r.change.toFixed(4) + ' TL';
+    badgesEl.innerHTML =
+      '<span class="badge ' + D + '">' + chgTxt + '</span>' +
+      '<span class="badge neutral kur-amt">' + chgAmt + '</span>';
   }
-  var tryTotal=0;
-  stocks.forEach(s=>{if(s.data&&s.data.currency==='TRY'&&portfolioData[s.symbol]) tryTotal+=(portfolioData[s.symbol].qty||0)*s.data.price;});
-  var portEl=document.getElementById('kur-port'),portVal=document.getElementById('kur-port-val');
-  if (portEl&&portVal){if(tryTotal>0&&usdtryRate.price>0){portVal.textContent='$'+(tryTotal/usdtryRate.price).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});portEl.style.display='';}else portEl.style.display='none';}
+
+  // Günlük yüksek / düşük / değişim
+  var fmtKur = function(v) { return v != null ? v.toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4}) : '-'; };
+  var el = function(id) { return document.getElementById(id); };
+
+  if (el('kur-day-high')) el('kur-day-high').textContent = fmtKur(r.dayHigh);
+  if (el('kur-day-low'))  el('kur-day-low').textContent  = fmtKur(r.dayLow);
+  if (el('kur-change'))   {
+    el('kur-change').textContent = (r.change >= 0 ? '+' : '') + r.change.toFixed(4);
+    el('kur-change').style.color = D === 'up' ? 'var(--up)' : D === 'down' ? 'var(--dn)' : '';
+  }
+  if (el('kur-mo-high'))  el('kur-mo-high').textContent  = fmtKur(r.monthHigh);
+  if (el('kur-mo-low'))   el('kur-mo-low').textContent   = fmtKur(r.monthLow);
+  if (el('kur-wk-chg') && r.weekChange != null) {
+    var wD  = r.weekChange > 0 ? 'up' : r.weekChange < 0 ? 'down' : 'neutral';
+    var wSign = r.weekChange >= 0 ? '+' : '';
+    el('kur-wk-chg').textContent = wSign + r.weekChange.toFixed(2) + '%';
+    el('kur-wk-chg').style.color = wD === 'up' ? 'var(--up)' : wD === 'down' ? 'var(--dn)' : '';
+  }
+
+  // Sparkline
+  var hist = r.closes;
+  if (hist.length) {
+    var cc = chartCol(D), cb = chartBg(D);
+    if (charts['USDTRY']) {
+      var ch = charts['USDTRY'];
+      ch.data.labels = hist.map(function() { return ''; });
+      ch.data.datasets[0].data            = hist;
+      ch.data.datasets[0].borderColor     = cc;
+      ch.data.datasets[0].backgroundColor = cb;
+      ch.update('none');
+    } else {
+      var ctx = document.getElementById('cv-USDTRY');
+      if (ctx) {
+        charts['USDTRY'] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: hist.map(function() { return ''; }),
+            datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales:  { x: { display: false }, y: { display: false, grace: '8%' } },
+          },
+        });
+      }
+    }
+  }
+
+  // Portföy USD değeri
+  var tryTotal = 0;
+  stocks.forEach(function(s) {
+    if (s.data && s.data.currency === 'TRY' && portfolioData[s.symbol])
+      tryTotal += (portfolioData[s.symbol].qty || 0) * s.data.price;
+  });
+  var portEl  = document.getElementById('kur-port');
+  var portVal = document.getElementById('kur-port-val');
+  if (portEl && portVal) {
+    if (tryTotal > 0 && r.price > 0) {
+      portVal.textContent = '$' + (tryTotal / r.price).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+      portEl.style.display = '';
+    } else {
+      portEl.style.display = 'none';
+    }
+  }
 }
 function ensureUsdTryCard() {
   if (!document.getElementById('card-USDTRY')) {

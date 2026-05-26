@@ -480,10 +480,19 @@ body {
 .kur-card.up::after    { background: radial-gradient(circle, var(--up-glow), transparent 70%); }
 .kur-card.down::before { background: linear-gradient(90deg, transparent, var(--dn-glow), transparent); }
 .kur-card.down::after  { background: radial-gradient(circle, var(--dn-glow), transparent 70%); }
-.kur-port { padding-top: 2px; }
+.kur-port { }
+.kur-port-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 4px;
+}
 .kur-port-val {
   font-size: 18px; font-weight: 700; font-family: var(--mono);
   color: var(--text); letter-spacing: -.03em;
+}
+.badge.kur-amt {
+  font-family: var(--mono); font-size: 10px;
+  background: var(--surface3); color: var(--text2);
+  border: 1px solid var(--border2);
 }
 
 /* ── Sort bar (UV #13) ── */
