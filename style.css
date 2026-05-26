@@ -527,6 +527,33 @@ body {
 }
 .note-sector-row { margin-bottom: 8px; }
 
+/* ── Mum grafik (Candlestick) ── */
+.chart-area.candle-mode {
+  height: 180px;
+  position: relative;
+  overflow: hidden;
+}
+.chart-area.candle-mode svg { display: block; overflow: visible; }
+
+/* OHLC bilgi overlay — sol üst köşe */
+.candle-info {
+  position: absolute; top: 0; left: 0; right: 0;
+  font-size: 9px; font-weight: 600; font-family: var(--mono); letter-spacing: .02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none; line-height: 1; z-index: 1;
+}
+
+/* Chart mode toggle butonu */
+.chart-mode-btn {
+  padding: 4px 7px; font-size: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--muted); cursor: pointer;
+  transition: all .15s; flex-shrink: 0; line-height: 1;
+  display: flex; align-items: center; margin-left: 4px;
+}
+.chart-mode-btn:hover  { background: var(--surface3); color: var(--text2); border-color: var(--border2); }
+.chart-mode-btn.active { background: var(--surface3); color: var(--text);  border-color: var(--border3); }
+
 /* ═══════════════════════════════════════════════
    RESPONSIVE — Üç kırılım noktası
    640px: geniş mobil / küçük tablet
@@ -586,6 +613,9 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   .card    { border-radius: var(--r-lg); padding: 1rem 1.125rem 0.875rem; }
   .c-price { font-size: 26px; }
   .sc-v    { font-size: 22px; }
+
+  /* Mum grafik mobilde biraz kısalt */
+  .chart-area.candle-mode { height: 145px; }
 }
 
 /* ──────────────────────────────────────────────

@@ -14,7 +14,7 @@ let BIST_LIST = (() => {
 })();
 
 // ── State ──
-let stocks = [], charts = {}, histories = {}, chartRanges = {};
+let stocks = [], charts = {}, histories = {}, chartRanges = {}, chartMode = {};
 let portfolioData = {}, targetData = {}, usdtryRate = null;
 let notesData = {}, sectorData = {};       // UV #11 & #12
 let currentSort = 'added';                 // UV #13
@@ -98,12 +98,27 @@ async function fetchStockPrice(symbol, exchange, range) {
   const changePct = +((change / prev) * 100).toFixed(4);
 
   const q = result.indicators?.quote?.[0] || {};
-  const rawClose = q.close || [], rawHigh = q.high || [], rawLow = q.low || [], rawVolume = q.volume || [];
+  const rawClose = q.close || [], rawHigh = q.high || [], rawLow = q.low || [],
+        rawVolume = q.volume || [], rawOpen = q.open || [];
+  const rawTs = result.timestamp || [];
+
+  // Tüm OHLCV ve timestamp'leri aynı indekste hizala; yalnızca close dolu olanları tut
   const aligned = rawClose
-    .map((c, i) => ({ close: c, high: rawHigh[i] ?? null, low: rawLow[i] ?? null, volume: rawVolume[i] ?? null }))
+    .map((c, i) => ({
+      t:      rawTs[i]      != null ? rawTs[i] * 1000 : null, // ms timestamp
+      o:      rawOpen[i]    ?? null,
+      close:  c,
+      high:   rawHigh[i]   ?? null,
+      low:    rawLow[i]    ?? null,
+      volume: rawVolume[i] ?? null,
+    }))
     .filter(d => d.close != null);
-  const closes = aligned.map(d => d.close), highs = aligned.map(d => d.high),
-        lows   = aligned.map(d => d.low),   volumes = aligned.map(d => d.volume);
+
+  const ohlcv   = aligned;                          // mum grafik için tam dizi
+  const closes  = aligned.map(d => d.close);
+  const highs   = aligned.map(d => d.high);
+  const lows    = aligned.map(d => d.low);
+  const volumes = aligned.map(d => d.volume);
 
   const yesterday = aligned.length >= 2 ? {
     high: aligned[aligned.length - 2].high, low: aligned[aligned.length - 2].low,
@@ -135,6 +150,7 @@ async function fetchStockPrice(symbol, exchange, range) {
     yesterday, dividendYield, lastDividend,
     currency:   meta.currency || (exchange === 'BIST' ? 'TRY' : 'USD'),
     closes,
+    ohlcv,      // {t, o, close, high, low, volume} dizisi — mum grafik için
     weekHigh52: meta.fiftyTwoWeekHigh || null,
     weekLow52:  meta.fiftyTwoWeekLow  || null,
     avgVolume:  meta.averageDailyVolume10Day || meta.averageDailyVolume3Month || null,
@@ -253,7 +269,7 @@ function makeUsdTrySkeletonCard() {
     '<div class="live-dot" style="flex-shrink:0;margin-top:4px"></div></div>'+
     '<div class="c-price" id="kur-price"><div class="skel-box" style="width:120px;height:28px;border-radius:5px"></div></div>'+
     '<div class="c-badges" id="kur-badges"><span class="badge loading">Yükleniyor...</span></div>'+
-    '<div class="chart-area"><canvas id="cv-USDTRY" aria-label="USD/TRY grafik"></canvas></div>'+
+    '<div class="chart-area" id="chart-area-USDTRY"><canvas id="cv-USDTRY" aria-label="USD/TRY grafik"></canvas></div>'+
     '<div class="sep"></div>'+
     '<div class="kur-port" id="kur-port" style="display:none"><div class="m-lbl" style="margin-bottom:5px">Portföy toplam (USD)</div><div class="kur-port-val" id="kur-port-val">-</div></div>';
   return d;
@@ -332,6 +348,111 @@ function clearNote(sym) {
 function renderNoteBadge(sym) {
   var btn=document.getElementById('note-btn-'+sym); if (!btn) return;
   btn.classList.toggle('active',!!(notesData[sym]||sectorData[sym]));
+}
+
+// ── Mum Grafik (Candlestick) ──
+function toggleChartMode(sym) {
+  chartMode[sym] = chartMode[sym] === 'candle' ? 'line' : 'candle';
+  var btn = document.getElementById('chart-mode-btn-' + sym);
+  if (btn) {
+    var isCandle = chartMode[sym] === 'candle';
+    btn.innerHTML = isCandle
+      ? '<i class="ti ti-chart-line"></i>'
+      : '<i class="ti ti-chart-candle"></i>';
+    btn.title = isCandle ? 'Çizgi grafik' : 'Mum grafik';
+    btn.classList.toggle('active', isCandle);
+  }
+  var s = stocks.find(x => x.symbol === sym);
+  if (s && s.data) updateCard(s, null);
+}
+
+function renderCandleChart(chartArea, sym, d) {
+  // Mevcut Chart.js sparkline'ı yok et
+  if (charts[sym]) { charts[sym].destroy(); delete charts[sym]; }
+  chartArea.classList.add('candle-mode');
+
+  var bars = d.ohlcv || [];
+  // Açık değeri olmayan veya eksik barları filtrele
+  bars = bars.filter(b => b.o != null && b.high != null && b.low != null && b.close != null);
+
+  // Seçili aralığa göre maksimum bar sayısı
+  var range = chartRanges[sym] || '1y';
+  var MAX   = { '1mo': 30, '3mo': 65, '6mo': 90, '1y': 90, '5y': 80 }[range] || 90;
+  if (bars.length > MAX) bars = bars.slice(bars.length - MAX);
+
+  if (bars.length < 2) {
+    chartArea.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:11px;color:var(--muted)">Açık fiyat verisi yok</div>';
+    return;
+  }
+
+  var N  = bars.length;
+  var VW = N * 9;   // her mum 9 birim yer
+  var VH = 160;
+  var PT = 6, PB = 6;
+  var chartH = VH - PT - PB;
+
+  // Fiyat ölçeği
+  var maxP = Math.max.apply(null, bars.map(b => b.high));
+  var minP = Math.min.apply(null, bars.map(b => b.low));
+  var rng  = maxP - minP || 1;
+  var pad  = rng * 0.06;
+  function sy(p) { return PT + (maxP + pad - p) / (rng + 2 * pad) * chartH; }
+
+  // Hacim ölçeği (alt %20)
+  var VOL_H  = VH * 0.18;
+  var maxVol = Math.max.apply(null, bars.map(b => b.volume || 0)) || 1;
+  function sv(v) { return VH - (v / maxVol) * VOL_H; }
+
+  var UP = '#10b981', DN = '#f43f5e';
+  var parts = [];
+
+  bars.forEach(function(bar, i) {
+    var x    = i * 9 + 4.5;
+    var bull = bar.close >= bar.o;
+    var col  = bull ? UP : DN;
+    var bodyT = sy(Math.max(bar.o, bar.close));
+    var bodyB = sy(Math.min(bar.o, bar.close));
+    var bodyH = Math.max(1, bodyB - bodyT);
+
+    // Tooltip: AÇILIŞ/YÜKSEK/DÜŞÜK/KAPANIŞ
+    var tip = bar.t
+      ? new Date(bar.t).toLocaleDateString('tr-TR') + '\n'
+      : '';
+    tip += 'A:' + bar.o.toFixed(2) + '  Y:' + bar.high.toFixed(2) + '\nD:' + bar.low.toFixed(2) + '  K:' + bar.close.toFixed(2);
+
+    // Hacim barı
+    if (bar.volume) {
+      parts.push(
+        '<rect x="' + (x - 2.5) + '" y="' + sv(bar.volume) + '" width="5" height="' + (VH - sv(bar.volume)) + '" fill="' + col + '" opacity="0.25"/>'
+      );
+    }
+
+    // Fitil (wick)
+    parts.push(
+      '<line x1="' + x + '" y1="' + sy(bar.high) + '" x2="' + x + '" y2="' + bodyT + '" stroke="' + col + '" stroke-width="1" opacity="0.75"/>',
+      '<line x1="' + x + '" y1="' + bodyB + '" x2="' + x + '" y2="' + sy(bar.low) + '" stroke="' + col + '" stroke-width="1" opacity="0.75"/>'
+    );
+
+    // Gövde (body)
+    parts.push(
+      '<g><title>' + tip + '</title>' +
+      '<rect x="' + (x - 3) + '" y="' + bodyT + '" width="6" height="' + bodyH + '" fill="' + col + '" rx="0.5"/>' +
+      '</g>'
+    );
+  });
+
+  // Son mum bilgisi — overlay etiket
+  var last = bars[bars.length - 1];
+  var lastBull = last.close >= last.o;
+  var infoCol  = lastBull ? UP : DN;
+  var infoTxt  = 'A ' + last.o.toFixed(2) + ' Y ' + last.high.toFixed(2) + ' D ' + last.low.toFixed(2) + ' K ' + last.close.toFixed(2);
+
+  chartArea.innerHTML =
+    '<div class="candle-info" style="color:' + infoCol + '">' + infoTxt + '</div>' +
+    '<svg viewBox="0 0 ' + VW + ' ' + VH + '" width="100%" height="100%"' +
+         ' preserveAspectRatio="none" style="display:block;margin-top:16px">' +
+      parts.join('') +
+    '</svg>';
 }
 
 // ── Sıralama (UV #13) ──
@@ -516,8 +637,13 @@ function makeSkeletonCard(sym, name, exch) {
     '<div class="c-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>'+
     '<div class="c-badges"><span class="badge loading">Veri çekiliyor...</span></div>'+
     '<div id="tgt-badges-'+sym+'" class="tgt-badges-row"></div>'+
-    '<div class="range-bar">'+rangeBtns+'</div>'+
-    '<div class="chart-area"><canvas id="cv-'+sym+'" aria-label="'+sym+' grafik"></canvas></div>'+
+    '<div class="range-bar">'+
+      rangeBtns+
+      '<button class="chart-mode-btn" id="chart-mode-btn-'+sym+'" onclick="toggleChartMode(\''+sym+'\')" title="Mum grafik">'+
+        '<i class="ti ti-chart-candle"></i>'+
+      '</button>'+
+    '</div>'+
+    '<div class="chart-area" id="chart-area-'+sym+'"><canvas id="cv-'+sym+'" aria-label="'+sym+' grafik"></canvas></div>'+
     '<div class="sep"></div>'+
     '<div class="c-meta">'+
       '<div class="m-col"><div class="m-lbl">Yüksek</div><div class="m-val" data-k="high-today">-</div><div class="m-val m-prev" data-k="high-prev">-</div></div>'+
@@ -608,14 +734,49 @@ function updateCard(s, prevPrice) {
 
   updatePortfolioPanel(s.symbol,d.price,d.currency);
   renderTargetBadges(s.symbol);
-  renderSectorTag(s.symbol);      // UV #11
-  renderNoteBadge(s.symbol);      // UV #12
+  renderSectorTag(s.symbol);
+  renderNoteBadge(s.symbol);
 
-  var hist=d.closes.length?d.closes:(histories[s.symbol]||[d.price]);
-  histories[s.symbol]=hist; var cc=chartCol(D),cb=chartBg(D);
-  if (charts[s.symbol]){var ch=charts[s.symbol];ch.data.labels=hist.map(()=>'');ch.data.datasets[0].data=hist;ch.data.datasets[0].borderColor=cc;ch.data.datasets[0].backgroundColor=cb;ch.update('none');}
-  else{var ctx=document.getElementById('cv-'+s.symbol);if(ctx){charts[s.symbol]=new Chart(ctx,{type:'line',data:{labels:hist.map(()=>''),datasets:[{data:hist,borderColor:cc,borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:cb,tension:0.4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false,grace:'8%'}}}});}}
-}
+  var chartArea = document.getElementById('chart-area-' + s.symbol);
+
+  if (chartMode[s.symbol] === 'candle') {
+    // ── Mum grafik ──
+    renderCandleChart(chartArea, s.symbol, d);
+  } else {
+    // ── Çizgi (sparkline) ──
+    chartArea.classList.remove('candle-mode');
+    // Mum modundan dönüşte canvas'ı yeniden oluştur
+    if (!document.getElementById('cv-' + s.symbol)) {
+      chartArea.innerHTML = '<canvas id="cv-' + s.symbol + '" aria-label="' + s.symbol + ' grafik"></canvas>';
+    }
+    var hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
+    histories[s.symbol] = hist;
+    var cc = chartCol(D), cb = chartBg(D);
+    if (charts[s.symbol]) {
+      var ch = charts[s.symbol];
+      ch.data.labels = hist.map(() => '');
+      ch.data.datasets[0].data            = hist;
+      ch.data.datasets[0].borderColor     = cc;
+      ch.data.datasets[0].backgroundColor = cb;
+      ch.update('none');
+    } else {
+      var ctx = document.getElementById('cv-' + s.symbol);
+      if (ctx) {
+        charts[s.symbol] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: hist.map(() => ''),
+            datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales:  { x: { display: false }, y: { display: false, grace: '8%' } },
+          },
+        });
+      }
+    }
+  }
 
 function setError(sym, msg) {
   var card=document.getElementById('card-'+sym); if (!card) return;
@@ -628,7 +789,7 @@ function setError(sym, msg) {
 // ── Ekle / Kaldır / Yenile ──
 async function addStock(sym, name, exch) {
   if (stocks.find(s=>s.symbol===sym)) return;
-  histories[sym]=[];chartRanges[sym]=chartRanges[sym]||'1y';
+  histories[sym]=[];chartRanges[sym]=chartRanges[sym]||'1y';chartMode[sym]=chartMode[sym]||'line';
   var s={symbol:sym,name:name,exchange:exch,data:null};
   stocks.push(s); saveToStorage();
   // Modal sadece gerçekten açıksa kapat (sayfa yüklemede toplu addStock çağrılarında gereksiz scheduleRefresh tetiklenmesin)
@@ -657,7 +818,7 @@ async function retryFetch(sym) {
 
 function removeStock(sym) {
   if (charts[sym]){charts[sym].destroy();delete charts[sym];}
-  delete histories[sym]; delete chartRanges[sym];
+  delete histories[sym]; delete chartRanges[sym]; delete chartMode[sym];
   // notesData, sectorData, portfolioData, targetData kasıtlı korunuyor
   stocks=stocks.filter(s=>s.symbol!==sym); saveToStorage();
   var c=document.getElementById('card-'+sym); if(c)c.remove();
