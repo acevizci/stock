@@ -486,6 +486,47 @@ body {
   color: var(--text); letter-spacing: -.03em;
 }
 
+/* ── Sort bar (UV #13) ── */
+.sort-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.sort-lbl {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  font-family: var(--mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+}
+.sort-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.sort-pill {
+  padding: 4px 10px; font-size: 10px; font-weight: 600; border-radius: 20px;
+  border: 1px solid var(--border2); background: var(--surface2); color: var(--muted);
+  cursor: pointer; font-family: var(--mono); letter-spacing: .03em; transition: all .15s;
+}
+.sort-pill:hover  { background: var(--surface3); color: var(--text2); }
+.sort-pill.active { background: var(--accent-bg); color: var(--accent); border-color: rgba(59,130,246,.3); }
+
+/* ── Sektör etiketi (UV #11) ── */
+.sector-tag {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  padding: 1px 6px; border-radius: 4px;
+  background: var(--accent-bg); color: var(--accent);
+  border: 1px solid rgba(59,130,246,.2);
+  font-family: var(--mono); letter-spacing: .04em;
+  margin-left: 5px; vertical-align: middle;
+}
+
+/* ── Not butonu aktif hali (UV #12) ── */
+.card-action-btn.active {
+  background: var(--accent-bg); color: var(--accent); border-color: rgba(59,130,246,.3);
+}
+
+/* ── Not textarea ve panel (UV #12) ── */
+.note-ta {
+  width: 100%; min-height: 72px; resize: vertical;
+  font-size: 12px; line-height: 1.5; font-family: var(--sans);
+}
+.note-sector-row { margin-bottom: 8px; }
+
 /* ── Responsive ── */
 @media (max-width: 560px) {
   .app-shell { padding: 1.25rem 1rem 3rem; }
