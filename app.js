@@ -509,22 +509,41 @@ function updateGoldCard() {
   if (badgesEl) {
     var arrow  = D === 'up' ? '+' : D === 'down' ? '-' : '';
     var pctTxt = arrow + ' ' + Math.abs(g.changePct).toFixed(2) + '%';
-    var amtTxt = (g.change >= 0 ? '+' : '') + '$' + Math.abs(g.change).toFixed(2);
+    var changeGrBadge = hasTry ? (g.change / TROY_OZ_TO_GRAM * usdtryRate.price) : null;
+    var amtTxt = changeGrBadge != null
+      ? (changeGrBadge >= 0 ? '+' : '') + changeGrBadge.toFixed(2) + ' TL'
+      : (g.change >= 0 ? '+$' : '-$') + Math.abs(g.change).toFixed(2);
     badgesEl.innerHTML =
       '<span class="badge ' + D + '">' + pctTxt + '</span>' +
       '<span class="badge neutral kur-amt">' + amtTxt + '</span>';
   }
 
-  // Stat satırları — ons bazında göster
-  var fmtOz  = function(v) { return v != null ? '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '-'; };
-  if (elG('gold-day-high')) elG('gold-day-high').textContent = fmtOz(g.dayHighOz);
-  if (elG('gold-day-low'))  elG('gold-day-low').textContent  = fmtOz(g.dayLowOz);
+  // Stat satırları — TRY/gram (kur varsa), yoksa USD/oz
+  var ozToGr = function(oz) { return oz != null && hasTry ? (oz / TROY_OZ_TO_GRAM * usdtryRate.price) : null; };
+  var fmtGr  = function(v)  { return v != null ? v.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' TL' : '-'; };
+  var fmtOz  = function(v)  { return v != null ? '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '-'; };
+
+  var dayHighVal  = hasTry ? ozToGr(g.dayHighOz)   : g.dayHighOz;
+  var dayLowVal   = hasTry ? ozToGr(g.dayLowOz)    : g.dayLowOz;
+  var moHighVal   = hasTry ? ozToGr(g.monthHighOz)  : g.monthHighOz;
+  var moLowVal    = hasTry ? ozToGr(g.monthLowOz)   : g.monthLowOz;
+  var fmtVal      = hasTry ? fmtGr : fmtOz;
+
+  // Günlük değişim TL/gr cinsinden
+  var changeGr    = hasTry ? (g.change / TROY_OZ_TO_GRAM * usdtryRate.price) : null;
+
+  if (elG('gold-day-high')) elG('gold-day-high').textContent = fmtVal(dayHighVal);
+  if (elG('gold-day-low'))  elG('gold-day-low').textContent  = fmtVal(dayLowVal);
   if (elG('gold-change')) {
-    elG('gold-change').textContent = (g.change >= 0 ? '+' : '') + '$' + Math.abs(g.change).toFixed(2);
+    var chV = hasTry ? changeGr : g.change;
+    var chTxt = hasTry
+      ? (chV >= 0 ? '+' : '') + chV.toFixed(2) + ' TL'
+      : (chV >= 0 ? '+$' : '-$') + Math.abs(chV).toFixed(2);
+    elG('gold-change').textContent = chTxt;
     elG('gold-change').style.color = D === 'up' ? 'var(--up)' : D === 'down' ? 'var(--dn)' : '';
   }
-  if (elG('gold-mo-high')) elG('gold-mo-high').textContent = fmtOz(g.monthHighOz);
-  if (elG('gold-mo-low'))  elG('gold-mo-low').textContent  = fmtOz(g.monthLowOz);
+  if (elG('gold-mo-high')) elG('gold-mo-high').textContent = fmtVal(moHighVal);
+  if (elG('gold-mo-low'))  elG('gold-mo-low').textContent  = fmtVal(moLowVal);
   if (elG('gold-wk-chg') && g.weekChange != null) {
     var wD    = g.weekChange > 0 ? 'up' : g.weekChange < 0 ? 'down' : 'neutral';
     var wSign = g.weekChange >= 0 ? '+' : '';
