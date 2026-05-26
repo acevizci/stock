@@ -527,32 +527,101 @@ body {
 }
 .note-sector-row { margin-bottom: 8px; }
 
-/* ── Mum grafik (Candlestick) ── */
-.chart-area.candle-mode {
-  height: 180px;
-  position: relative;
+/* ── Sparkline tıklanabilir hint ── */
+.chart-clickable { position: relative; cursor: pointer; }
+.chart-expand-hint {
+  position: absolute; bottom: 4px; right: 4px;
+  font-size: 11px; color: var(--muted2); opacity: 0;
+  transition: opacity .2s; pointer-events: none; line-height: 1;
+}
+.chart-clickable:hover .chart-expand-hint { opacity: 1; }
+
+/* ── Grafik Modal Overlay ── */
+.chart-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(4,8,18,.85); backdrop-filter: blur(10px);
+  z-index: 200; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.chart-overlay.open { display: flex; }
+
+.chart-modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--r-xl); width: 100%; max-width: 900px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 40px 100px rgba(0,0,0,.8);
   overflow: hidden;
-}
-.chart-area.candle-mode svg { display: block; overflow: visible; }
-
-/* OHLC bilgi overlay — sol üst köşe */
-.candle-info {
-  position: absolute; top: 0; left: 0; right: 0;
-  font-size: 9px; font-weight: 600; font-family: var(--mono); letter-spacing: .02em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  pointer-events: none; line-height: 1; z-index: 1;
+  max-height: 92vh;
 }
 
-/* Chart mode toggle butonu */
-.chart-mode-btn {
-  padding: 4px 7px; font-size: 12px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 5px; color: var(--muted); cursor: pointer;
-  transition: all .15s; flex-shrink: 0; line-height: 1;
-  display: flex; align-items: center; margin-left: 4px;
+/* ── Modal Header ── */
+.cm-hdr {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
-.chart-mode-btn:hover  { background: var(--surface3); color: var(--text2); border-color: var(--border2); }
-.chart-mode-btn.active { background: var(--surface3); color: var(--text);  border-color: var(--border3); }
+.cm-hdr-left  { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cm-hdr-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.cm-sym-wrap { display: flex; align-items: baseline; gap: 10px; }
+.cm-title {
+  font-size: 20px; font-weight: 800; font-family: var(--mono);
+  color: var(--text); letter-spacing: -.02em;
+}
+.cm-name { font-size: 12px; color: var(--muted); }
+
+/* OHLCV satırı */
+.cm-ohlc {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-size: 11px; font-family: var(--mono); color: var(--muted);
+  min-height: 16px;
+}
+.cm-ohlc span { display: flex; align-items: center; gap: 3px; }
+.cm-ohlc strong { color: var(--text2); font-weight: 600; }
+.cm-date { color: var(--muted2); margin-right: 4px; }
+
+/* Range butonları */
+.cm-ranges { display: flex; gap: 4px; }
+.cm-range-btn {
+  padding: 5px 10px; font-size: 10px; font-weight: 700;
+  border-radius: 6px; border: 1px solid var(--border2);
+  background: var(--surface2); color: var(--muted);
+  cursor: pointer; font-family: var(--mono); letter-spacing: .04em;
+  transition: all .15s;
+}
+.cm-range-btn:hover  { background: var(--surface3); color: var(--text2); }
+.cm-range-btn.active { background: var(--surface3); color: var(--text); border-color: var(--border3); }
+
+.cm-close {
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 8px; cursor: pointer; color: var(--muted);
+  font-size: 15px; padding: 6px 8px; line-height: 1; transition: all .15s;
+}
+.cm-close:hover { background: var(--surface3); color: var(--text); }
+
+/* ── Grafik alanı ── */
+.cm-chart-wrap {
+  flex: 1; overflow: hidden; position: relative;
+  padding: 0.5rem 0.25rem 0.25rem;
+}
+.cm-chart {
+  width: 100%; height: 380px; position: relative;
+}
+.cm-nodata {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; font-size: 13px; color: var(--muted);
+}
+.cm-loading {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(15,22,32,.7);
+}
+
+/* ── Mum grafik — kart içindeki eski stiller kaldırıldı ── */
+.chart-mode-btn { display: none; } /* artık kullanılmıyor */
+
+/* ── Responsive — Modal ── */
 
 /* ═══════════════════════════════════════════════
    RESPONSIVE — Üç kırılım noktası
@@ -655,6 +724,15 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   /* Modal */
   .modal { padding: 1.125rem; gap: 10px; }
   .s-list { max-height: 160px; }
+
+  /* Grafik modal */
+  .chart-modal { border-radius: var(--r-lg); }
+  .cm-chart    { height: 260px; }
+  .cm-hdr      { padding: 0.75rem 1rem 0.625rem; }
+  .cm-title    { font-size: 16px; }
+  .cm-ohlc     { gap: 8px; font-size: 10px; }
+  .cm-ranges   { gap: 3px; }
+  .cm-range-btn { padding: 4px 7px; font-size: 9px; }
 
   /* Modal form row — dikey stack */
   .m-row              { flex-direction: column; }

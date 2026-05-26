@@ -351,108 +351,244 @@ function renderNoteBadge(sym) {
 }
 
 // ── Mum Grafik (Candlestick) ──
-function toggleChartMode(sym) {
-  chartMode[sym] = chartMode[sym] === 'candle' ? 'line' : 'candle';
-  var btn = document.getElementById('chart-mode-btn-' + sym);
-  if (btn) {
-    var isCandle = chartMode[sym] === 'candle';
-    btn.innerHTML = isCandle
-      ? '<i class="ti ti-chart-line"></i>'
-      : '<i class="ti ti-chart-candle"></i>';
-    btn.title = isCandle ? 'Çizgi grafik' : 'Mum grafik';
-    btn.classList.toggle('active', isCandle);
-  }
+// ── Grafik Modalı ──────────────────────────────
+var _chartModalSym = null;
+
+function openChartModal(sym) {
+  _chartModalSym = sym;
   var s = stocks.find(x => x.symbol === sym);
-  if (s && s.data) updateCard(s, null);
+  if (!s || !s.data) return;
+
+  var overlay = document.getElementById('chart-overlay');
+  var titleEl = document.getElementById('cm-title');
+  var nameEl  = document.getElementById('cm-name');
+  if (titleEl) titleEl.textContent = sym;
+  if (nameEl)  nameEl.textContent  = s.name;
+
+  // Range butonlarını hissenin mevcut aralığına senkronize et
+  var cur = chartRanges[sym] || '1y';
+  overlay.querySelectorAll('.cm-range-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.range === cur);
+  });
+
+  overlay.classList.add('open');
+  _renderFullChart(sym, s.data);
 }
 
-function renderCandleChart(chartArea, sym, d) {
-  // Mevcut Chart.js sparkline'ı yok et
-  if (charts[sym]) { charts[sym].destroy(); delete charts[sym]; }
-  chartArea.classList.add('candle-mode');
+function closeChartModal() {
+  document.getElementById('chart-overlay').classList.remove('open');
+  _chartModalSym = null;
+}
 
-  var bars = d.ohlcv || [];
-  // Açık değeri olmayan veya eksik barları filtrele
-  bars = bars.filter(b => b.o != null && b.high != null && b.low != null && b.close != null);
+async function cmChangeRange(range) {
+  var sym = _chartModalSym; if (!sym) return;
+  chartRanges[sym] = range;
 
-  // Seçili aralığa göre maksimum bar sayısı
-  var range = chartRanges[sym] || '1y';
-  var MAX   = { '1mo': 30, '3mo': 65, '6mo': 90, '1y': 90, '5y': 80 }[range] || 90;
-  if (bars.length > MAX) bars = bars.slice(bars.length - MAX);
+  document.querySelectorAll('.cm-range-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.range === range);
+  });
+
+  var loadEl = document.getElementById('cm-loading');
+  if (loadEl) loadEl.style.display = 'flex';
+
+  var s = stocks.find(x => x.symbol === sym);
+  try {
+    s.data = await fetchStockPrice(sym, s.exchange, range);
+    updateCard(s, null);
+    _renderFullChart(sym, s.data);
+  } catch(e) {
+    console.warn('[ChartModal]', e.message);
+  } finally {
+    if (loadEl) loadEl.style.display = 'none';
+  }
+}
+
+function _renderFullChart(sym, d) {
+  var container = document.getElementById('cm-chart');
+  if (!container) return;
+
+  var bars = (d.ohlcv || []).filter(function(b) {
+    return b.o != null && b.high != null && b.low != null && b.close != null;
+  });
 
   if (bars.length < 2) {
-    chartArea.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:11px;color:var(--muted)">Açık fiyat verisi yok</div>';
+    container.innerHTML = '<div class="cm-nodata">Yeterli veri yok</div>';
     return;
   }
 
-  var N  = bars.length;
-  var VW = N * 9;   // her mum 9 birim yer
-  var VH = 160;
-  var PT = 6, PB = 6;
-  var chartH = VH - PT - PB;
+  // ── Boyutlar ──
+  var W     = container.clientWidth  || 700;
+  var H     = container.clientHeight || 340;
+  var PL    = 64;   // sol — fiyat ekseni
+  var PR    = 10;   // sağ
+  var PT    = 14;   // üst
+  var PB_VOL= 52;   // alt — hacim + tarih
+  var VOL_H = 38;   // hacim bölgesi yüksekliği
+  var chartW = W - PL - PR;
+  var chartH = H - PT - PB_VOL;
 
-  // Fiyat ölçeği
-  var maxP = Math.max.apply(null, bars.map(b => b.high));
-  var minP = Math.min.apply(null, bars.map(b => b.low));
-  var rng  = maxP - minP || 1;
-  var pad  = rng * 0.06;
-  function sy(p) { return PT + (maxP + pad - p) / (rng + 2 * pad) * chartH; }
+  // Bar genişliği: bar sayısına göre otomatik hesapla
+  var barW  = Math.max(2, Math.min(12, chartW / bars.length - 1));
+  var gap   = barW * 0.15;
+  var step  = chartW / bars.length;
 
-  // Hacim ölçeği (alt %20)
-  var VOL_H  = VH * 0.18;
-  var maxVol = Math.max.apply(null, bars.map(b => b.volume || 0)) || 1;
-  function sv(v) { return VH - (v / maxVol) * VOL_H; }
+  function bx(i) { return PL + i * step + step / 2; } // bar merkezi
 
+  // ── Fiyat skalası ──
+  var maxP = Math.max.apply(null, bars.map(function(b){ return b.high; }));
+  var minP = Math.min.apply(null, bars.map(function(b){ return b.low;  }));
+  var prng  = maxP - minP || 1;
+  var ppad  = prng * 0.08;
+  var pMax  = maxP + ppad, pMin = minP - ppad;
+
+  function py(p) { return PT + (pMax - p) / (pMax - pMin) * chartH; }
+
+  // ── Hacim skalası ──
+  var maxVol = Math.max.apply(null, bars.map(function(b){ return b.volume || 0; })) || 1;
+  var volTop = H - PB_VOL + 4;
+  function vy(v) { return H - 18 - (v / maxVol) * (VOL_H - 8); }
+
+  // ── Fiyat grid çizgileri + Y ekseni etiketleri ──
+  var tickCount = 5;
+  var gridLines = '', yLabels = '';
+  for (var ti = 0; ti <= tickCount; ti++) {
+    var tickP = pMin + (pMax - pMin) * ti / tickCount;
+    var tickY = py(tickP);
+    gridLines += '<line x1="' + PL + '" y1="' + tickY + '" x2="' + (W - PR) + '" y2="' + tickY +
+                 '" stroke="rgba(255,255,255,.045)" stroke-width="1"/>';
+    var label = tickP >= 1000
+      ? tickP.toLocaleString('tr-TR', {maximumFractionDigits: 0})
+      : tickP.toFixed(2);
+    yLabels += '<text x="' + (PL - 5) + '" y="' + (tickY + 4) + '" text-anchor="end"' +
+               ' font-size="9" fill="#64748b" font-family="JetBrains Mono,monospace">' + label + '</text>';
+  }
+
+  // ── X ekseni tarih etiketleri ──
+  var xLabels = '';
+  var dateStep = Math.max(1, Math.floor(bars.length / 6));
+  for (var di = 0; di < bars.length; di += dateStep) {
+    var bar = bars[di];
+    if (!bar.t) continue;
+    var dt  = new Date(bar.t);
+    var lbl = (dt.getMonth() + 1) + '/' + (dt.getFullYear() % 100);
+    xLabels += '<text x="' + bx(di) + '" y="' + (H - 4) + '" text-anchor="middle"' +
+               ' font-size="9" fill="#64748b" font-family="JetBrains Mono,monospace">' + lbl + '</text>';
+  }
+
+  // ── Mumlar ──
   var UP = '#10b981', DN = '#f43f5e';
-  var parts = [];
+  var candleParts = '', volParts = '';
 
   bars.forEach(function(bar, i) {
-    var x    = i * 9 + 4.5;
+    var x    = bx(i);
     var bull = bar.close >= bar.o;
     var col  = bull ? UP : DN;
-    var bodyT = sy(Math.max(bar.o, bar.close));
-    var bodyB = sy(Math.min(bar.o, bar.close));
-    var bodyH = Math.max(1, bodyB - bodyT);
+    var bodyT = py(Math.max(bar.o, bar.close));
+    var bodyB = py(Math.min(bar.o, bar.close));
+    var bodyH = Math.max(1.5, bodyB - bodyT);
+    var hw    = Math.max(1, barW / 2 - gap);
 
-    // Tooltip: AÇILIŞ/YÜKSEK/DÜŞÜK/KAPANIŞ
-    var tip = bar.t
-      ? new Date(bar.t).toLocaleDateString('tr-TR') + '\n'
-      : '';
-    tip += 'A:' + bar.o.toFixed(2) + '  Y:' + bar.high.toFixed(2) + '\nD:' + bar.low.toFixed(2) + '  K:' + bar.close.toFixed(2);
+    // Fitil
+    candleParts +=
+      '<line x1="' + x + '" y1="' + py(bar.high) + '" x2="' + x + '" y2="' + bodyT +
+      '" stroke="' + col + '" stroke-width="1" opacity="0.8"/>' +
+      '<line x1="' + x + '" y1="' + bodyB + '" x2="' + x + '" y2="' + py(bar.low) +
+      '" stroke="' + col + '" stroke-width="1" opacity="0.8"/>';
 
-    // Hacim barı
+    // Gövde — etkileşim verisi data attribute olarak
+    candleParts +=
+      '<rect class="cm-bar" x="' + (x - hw) + '" y="' + bodyT + '" width="' + (hw * 2) + '"' +
+      ' height="' + bodyH + '" fill="' + col + '" rx="1"' +
+      ' data-i="' + i + '" data-x="' + x + '" data-col="' + col + '"/>';
+
+    // Hacim
     if (bar.volume) {
-      parts.push(
-        '<rect x="' + (x - 2.5) + '" y="' + sv(bar.volume) + '" width="5" height="' + (VH - sv(bar.volume)) + '" fill="' + col + '" opacity="0.25"/>'
-      );
+      volParts +=
+        '<rect x="' + (x - hw) + '" y="' + vy(bar.volume) + '" width="' + (hw * 2) + '"' +
+        ' height="' + (H - 18 - vy(bar.volume)) + '" fill="' + col + '" opacity="0.3" rx="1"/>';
     }
-
-    // Fitil (wick)
-    parts.push(
-      '<line x1="' + x + '" y1="' + sy(bar.high) + '" x2="' + x + '" y2="' + bodyT + '" stroke="' + col + '" stroke-width="1" opacity="0.75"/>',
-      '<line x1="' + x + '" y1="' + bodyB + '" x2="' + x + '" y2="' + sy(bar.low) + '" stroke="' + col + '" stroke-width="1" opacity="0.75"/>'
-    );
-
-    // Gövde (body)
-    parts.push(
-      '<g><title>' + tip + '</title>' +
-      '<rect x="' + (x - 3) + '" y="' + bodyT + '" width="6" height="' + bodyH + '" fill="' + col + '" rx="0.5"/>' +
-      '</g>'
-    );
   });
 
-  // Son mum bilgisi — overlay etiket
-  var last = bars[bars.length - 1];
-  var lastBull = last.close >= last.o;
-  var infoCol  = lastBull ? UP : DN;
-  var infoTxt  = 'A ' + last.o.toFixed(2) + ' Y ' + last.high.toFixed(2) + ' D ' + last.low.toFixed(2) + ' K ' + last.close.toFixed(2);
+  // ── Hacim ekseni ayırıcı ──
+  var separator = '<line x1="' + PL + '" y1="' + volTop + '" x2="' + (W - PR) + '" y2="' + volTop +
+                  '" stroke="rgba(255,255,255,.07)" stroke-width="1"/>';
 
-  chartArea.innerHTML =
-    '<div class="candle-info" style="color:' + infoCol + '">' + infoTxt + '</div>' +
-    '<svg viewBox="0 0 ' + VW + ' ' + VH + '" width="100%" height="100%"' +
-         ' preserveAspectRatio="none" style="display:block;margin-top:16px">' +
-      parts.join('') +
+  // ── SVG ──
+  var svg =
+    '<svg id="cm-svg" width="' + W + '" height="' + H + '" style="display:block;cursor:crosshair">' +
+      gridLines + yLabels + separator +
+      volParts + candleParts +
+      xLabels +
+      // Crosshair (başta gizli)
+      '<line id="cm-cross-v" x1="0" y1="' + PT + '" x2="0" y2="' + (H - PB_VOL) + '"' +
+      ' stroke="rgba(255,255,255,.2)" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"/>' +
+      '<line id="cm-cross-h" x1="' + PL + '" y1="0" x2="' + (W - PR) + '" y2="0"' +
+      ' stroke="rgba(255,255,255,.2)" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"/>' +
     '</svg>';
+
+  container.innerHTML = svg;
+
+  // ── OHLCV başlık kutusunu son mum ile başlat ──
+  var last = bars[bars.length - 1];
+  _updateCmOhlc(last, last.close >= last.o ? UP : DN);
+
+  // ── Mouse / touch etkileşimi ──
+  var svgEl = document.getElementById('cm-svg');
+  if (!svgEl) return;
+
+  function getBarAt(clientX) {
+    var rect = svgEl.getBoundingClientRect();
+    var relX = (clientX - rect.left) * (W / rect.width) - PL;
+    var idx  = Math.round(relX / step - 0.5);
+    return Math.max(0, Math.min(bars.length - 1, idx));
+  }
+
+  function onMove(clientX, clientY) {
+    var idx = getBarAt(clientX);
+    var bar = bars[idx];
+    var cx  = bx(idx);
+    var rect = svgEl.getBoundingClientRect();
+    var relY = (clientY - rect.top) * (H / rect.height);
+    var col  = bar.close >= bar.o ? UP : DN;
+
+    document.getElementById('cm-cross-v').setAttribute('x1', cx);
+    document.getElementById('cm-cross-v').setAttribute('x2', cx);
+    document.getElementById('cm-cross-v').setAttribute('visibility', 'visible');
+    document.getElementById('cm-cross-h').setAttribute('y1', relY);
+    document.getElementById('cm-cross-h').setAttribute('y2', relY);
+    document.getElementById('cm-cross-h').setAttribute('visibility', 'visible');
+
+    _updateCmOhlc(bar, col);
+  }
+  function onLeave() {
+    document.getElementById('cm-cross-v').setAttribute('visibility', 'hidden');
+    document.getElementById('cm-cross-h').setAttribute('visibility', 'hidden');
+    _updateCmOhlc(last, last.close >= last.o ? UP : DN);
+  }
+
+  svgEl.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+  svgEl.addEventListener('mouseleave', onLeave);
+  svgEl.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    onMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
+  svgEl.addEventListener('touchend', onLeave);
+}
+
+function _updateCmOhlc(bar, col) {
+  var el = document.getElementById('cm-ohlc');
+  if (!el) return;
+  var pct = bar.o ? ((bar.close - bar.o) / bar.o * 100) : 0;
+  var sign = pct >= 0 ? '+' : '';
+  var dt = bar.t ? new Date(bar.t).toLocaleDateString('tr-TR', { day:'2-digit', month:'short', year:'numeric' }) : '';
+  el.innerHTML =
+    '<span class="cm-date">' + dt + '</span>' +
+    '<span>A <strong>' + bar.o.toFixed(2) + '</strong></span>' +
+    '<span>Y <strong>' + bar.high.toFixed(2) + '</strong></span>' +
+    '<span>D <strong>' + bar.low.toFixed(2) + '</strong></span>' +
+    '<span>K <strong style="color:' + col + '">' + bar.close.toFixed(2) + '</strong></span>' +
+    (bar.volume ? '<span>Hcm <strong>' + fmtVol(bar.volume) + '</strong></span>' : '') +
+    '<span style="color:' + col + '">' + sign + pct.toFixed(2) + '%</span>';
 }
 
 // ── Sıralama (UV #13) ──
@@ -637,13 +773,11 @@ function makeSkeletonCard(sym, name, exch) {
     '<div class="c-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>'+
     '<div class="c-badges"><span class="badge loading">Veri çekiliyor...</span></div>'+
     '<div id="tgt-badges-'+sym+'" class="tgt-badges-row"></div>'+
-    '<div class="range-bar">'+
-      rangeBtns+
-      '<button class="chart-mode-btn" id="chart-mode-btn-'+sym+'" onclick="toggleChartMode(\''+sym+'\')" title="Mum grafik">'+
-        '<i class="ti ti-chart-candle"></i>'+
-      '</button>'+
+    '<div class="range-bar">' + rangeBtns + '</div>'+
+    '<div class="chart-area chart-clickable" id="chart-area-'+sym+'" onclick="openChartModal(\''+sym+'\')" title="Mum grafik için tıkla">'+
+      '<canvas id="cv-'+sym+'" aria-label="'+sym+' grafik"></canvas>'+
+      '<div class="chart-expand-hint"><i class="ti ti-chart-candle"></i></div>'+
     '</div>'+
-    '<div class="chart-area" id="chart-area-'+sym+'"><canvas id="cv-'+sym+'" aria-label="'+sym+' grafik"></canvas></div>'+
     '<div class="sep"></div>'+
     '<div class="c-meta">'+
       '<div class="m-col"><div class="m-lbl">Yüksek</div><div class="m-val" data-k="high-today">-</div><div class="m-val m-prev" data-k="high-prev">-</div></div>'+
@@ -737,46 +871,45 @@ function updateCard(s, prevPrice) {
   renderSectorTag(s.symbol);
   renderNoteBadge(s.symbol);
 
+  // ── Sparkline ──
   var chartArea = document.getElementById('chart-area-' + s.symbol);
-
-  if (chartMode[s.symbol] === 'candle') {
-    // ── Mum grafik ──
-    renderCandleChart(chartArea, s.symbol, d);
+  if (chartArea && !document.getElementById('cv-' + s.symbol)) {
+    // canvas silinmişse yeniden oluştur
+    var newCanvas = document.createElement('canvas');
+    newCanvas.id = 'cv-' + s.symbol;
+    newCanvas.setAttribute('aria-label', s.symbol + ' grafik');
+    chartArea.insertBefore(newCanvas, chartArea.firstChild);
+  }
+  var hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
+  histories[s.symbol] = hist;
+  var cc = chartCol(D), cb = chartBg(D);
+  if (charts[s.symbol]) {
+    var ch = charts[s.symbol];
+    ch.data.labels = hist.map(function() { return ''; });
+    ch.data.datasets[0].data            = hist;
+    ch.data.datasets[0].borderColor     = cc;
+    ch.data.datasets[0].backgroundColor = cb;
+    ch.update('none');
   } else {
-    // ── Çizgi (sparkline) ──
-    chartArea.classList.remove('candle-mode');
-    // Mum modundan dönüşte canvas'ı yeniden oluştur
-    if (!document.getElementById('cv-' + s.symbol)) {
-      chartArea.innerHTML = '<canvas id="cv-' + s.symbol + '" aria-label="' + s.symbol + ' grafik"></canvas>';
-    }
-    var hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
-    histories[s.symbol] = hist;
-    var cc = chartCol(D), cb = chartBg(D);
-    if (charts[s.symbol]) {
-      var ch = charts[s.symbol];
-      ch.data.labels = hist.map(() => '');
-      ch.data.datasets[0].data            = hist;
-      ch.data.datasets[0].borderColor     = cc;
-      ch.data.datasets[0].backgroundColor = cb;
-      ch.update('none');
-    } else {
-      var ctx = document.getElementById('cv-' + s.symbol);
-      if (ctx) {
-        charts[s.symbol] = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: hist.map(() => ''),
-            datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false, animation: false,
-            plugins: { legend: { display: false }, tooltip: { enabled: false } },
-            scales:  { x: { display: false }, y: { display: false, grace: '8%' } },
-          },
-        });
-      }
+    var ctx = document.getElementById('cv-' + s.symbol);
+    if (ctx) {
+      charts[s.symbol] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: hist.map(function() { return ''; }),
+          datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales:  { x: { display: false }, y: { display: false, grace: '8%' } },
+        },
+      });
     }
   }
+
+  // Modal açıksa yenile
+  if (_chartModalSym === s.symbol) _renderFullChart(s.symbol, d);
 } // ── updateCard sonu ──
 
 function setError(sym, msg) {
@@ -790,7 +923,7 @@ function setError(sym, msg) {
 // ── Ekle / Kaldır / Yenile ──
 async function addStock(sym, name, exch) {
   if (stocks.find(s=>s.symbol===sym)) return;
-  histories[sym]=[];chartRanges[sym]=chartRanges[sym]||'1y';chartMode[sym]=chartMode[sym]||'line';
+  histories[sym]=[];chartRanges[sym]=chartRanges[sym]||'1y';
   var s={symbol:sym,name:name,exchange:exch,data:null};
   stocks.push(s); saveToStorage();
   // Modal sadece gerçekten açıksa kapat (sayfa yüklemede toplu addStock çağrılarında gereksiz scheduleRefresh tetiklenmesin)
@@ -819,7 +952,7 @@ async function retryFetch(sym) {
 
 function removeStock(sym) {
   if (charts[sym]){charts[sym].destroy();delete charts[sym];}
-  delete histories[sym]; delete chartRanges[sym]; delete chartMode[sym];
+  delete histories[sym]; delete chartRanges[sym];
   // notesData, sectorData, portfolioData, targetData kasıtlı korunuyor
   stocks=stocks.filter(s=>s.symbol!==sym); saveToStorage();
   var c=document.getElementById('card-'+sym); if(c)c.remove();

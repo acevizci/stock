@@ -124,6 +124,37 @@
   <div class="toast-body" id="toast-body"></div>
 </div>
 
+<!-- Grafik Modalı -->
+<div class="chart-overlay" id="chart-overlay" onclick="if(event.target===this)closeChartModal()">
+  <div class="chart-modal">
+    <div class="cm-hdr">
+      <div class="cm-hdr-left">
+        <div class="cm-sym-wrap">
+          <span class="cm-title" id="cm-title"></span>
+          <span class="cm-name"  id="cm-name"></span>
+        </div>
+        <div class="cm-ohlc" id="cm-ohlc"></div>
+      </div>
+      <div class="cm-hdr-right">
+        <div class="cm-ranges">
+          <button class="cm-range-btn" data-range="1mo"  onclick="cmChangeRange('1mo')">1A</button>
+          <button class="cm-range-btn" data-range="3mo"  onclick="cmChangeRange('3mo')">3A</button>
+          <button class="cm-range-btn" data-range="6mo"  onclick="cmChangeRange('6mo')">6A</button>
+          <button class="cm-range-btn active" data-range="1y" onclick="cmChangeRange('1y')">1Y</button>
+          <button class="cm-range-btn" data-range="5y"   onclick="cmChangeRange('5y')">5Y</button>
+        </div>
+        <button class="cm-close" onclick="closeChartModal()"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div class="cm-loading" id="cm-loading" style="display:none">
+      <i class="ti ti-loader" style="animation:spin 1s linear infinite;font-size:20px;color:var(--muted)"></i>
+    </div>
+    <div class="cm-chart-wrap">
+      <div class="cm-chart" id="cm-chart"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Chart.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
