@@ -18,7 +18,7 @@ let stocks = [], charts = {}, histories = {}, chartRanges = {};
 let portfolioData = {}, targetData = {}, usdtryRate = null;
 let notesData = {}, sectorData = {};       // UV #11 & #12
 let currentSort = 'added';                 // UV #13
-let curTab = 'bist', notifOn = false, toastT = null, showOnlyDiv = false;
+let notifOn = false, toastT = null, showOnlyDiv = false;
 if ('Notification' in window && Notification.permission === 'granted') notifOn = true;
 
 // ── localStorage yardımcıları ──
@@ -46,15 +46,6 @@ async function fetchWithFallback(targetUrl) {
 function saveToStorage() {
   localStorage.setItem('my_tracked_stocks',
     JSON.stringify(stocks.map(s => ({ symbol: s.symbol, name: s.name, exchange: s.exchange }))));
-}
-
-// ── FMP yardımcı ──
-function parseFmpDiv(q) {
-  const y = q.dividendYield || q.lastAnnualDividendYield || 0;
-  if (y > 0) return y > 1 ? y / 100 : y;
-  const amt = q.lastAnnualDividend || q.annualDividend || 0;
-  const p   = q.price || 0;
-  return amt > 0 && p > 0 ? amt / p : 0;
 }
 
 let BIST_DIVIDENDS = {};
@@ -165,9 +156,19 @@ function fmtVol(v) {
   if (v >= 1e3) return (v/1e3).toFixed(0)+'K'; return String(v);
 }
 function fmtMcap(v, cur) {
-  if (!v) return '-'; var s = cur==='TRY'?' TL':'$';
-  if (v>=1e12) return (v/1e12).toFixed(2)+' Tr'+s; if (v>=1e9) return (v/1e9).toFixed(2)+' Mr'+s;
-  if (v>=1e6)  return (v/1e6).toFixed(1)+' Mn'+s;  return String(Math.round(v))+s;
+  if (!v) return '-';
+  if (cur === 'TRY') {
+    if (v >= 1e12) return (v/1e12).toFixed(2) + ' Tr TL';
+    if (v >= 1e9)  return (v/1e9).toFixed(2)  + ' Mr TL';
+    if (v >= 1e6)  return (v/1e6).toFixed(1)  + ' Mn TL';
+    return String(Math.round(v)) + ' TL';
+  } else {
+    // USD: prefix $ ve standart B/M/T kısaltmaları
+    if (v >= 1e12) return '$' + (v/1e12).toFixed(2) + 'T';
+    if (v >= 1e9)  return '$' + (v/1e9).toFixed(2)  + 'B';
+    if (v >= 1e6)  return '$' + (v/1e6).toFixed(1)  + 'M';
+    return '$' + String(Math.round(v));
+  }
 }
 function fmtDate(ts) { if (!ts) return ''; return new Date(ts*1000).toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function dirOf(c)    { return c > 0.001 ? 'up' : c < -0.001 ? 'down' : 'neutral'; }
@@ -376,7 +377,7 @@ function exportCSV() {
             'Adet','Ort. Maliyet','Toplam Maliyet','Güncel Değer','K/Z','K/Z %',
             'Üst Hedef','Alt Limit','Not'];
   function esc(v){if(v==null||v==='')return'';return'"'+String(v).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';}
-  function num(v){return(v!=null&&v!=='')?(typeof v==='number'?v:v):''; }
+  function num(v){return (v != null && v !== '') ? v : '';}
   var rows=[cols.join(D)];
   stocks.forEach(function(s){
     var d=s.data||{}, p=portfolioData[s.symbol]||{}, t=targetData[s.symbol]||{};
@@ -484,6 +485,7 @@ async function changeRange(sym, range) {
   try {
     s.data=await fetchStockPrice(sym,s.exchange,range); updateCard(s,null);
     if(card){var ca2=card.querySelector('.chart-area');if(ca2)ca2.style.opacity='';}
+    applySort(); // Yeni verilerle sıralamayı güncelle
   } catch(e){
     console.warn('[Range]',sym,e.message);
     if(card){var ca3=card.querySelector('.chart-area');if(ca3)ca3.style.opacity='';}
@@ -628,7 +630,10 @@ async function addStock(sym, name, exch) {
   if (stocks.find(s=>s.symbol===sym)) return;
   histories[sym]=[];chartRanges[sym]=chartRanges[sym]||'1y';
   var s={symbol:sym,name:name,exchange:exch,data:null};
-  stocks.push(s); saveToStorage(); closeModal(); renderUI();
+  stocks.push(s); saveToStorage();
+  // Modal sadece gerçekten açıksa kapat (sayfa yüklemede toplu addStock çağrılarında gereksiz scheduleRefresh tetiklenmesin)
+  if (document.getElementById('overlay').classList.contains('open')) closeModal();
+  renderUI();
   document.getElementById('grid').appendChild(makeSkeletonCard(sym,name,exch));
   if (portfolioData[sym]) updatePortfolioPanel(sym,null,null);
   if (targetData[sym])    renderTargetBadges(sym);
@@ -673,16 +678,29 @@ async function refreshAll() {
   }));
   updateSummary(); setUpd();
   btn.disabled=false; icon.style.animation='';
+  applySort(); // Güncel verilerle aktif sıralamayı yeniden uygula
 }
 
 // ── UI ──
 function renderUI() {
-  var has=stocks.length>0;
-  document.getElementById('empty-state').style.display=has?'none':'flex';
-  document.getElementById('sbar').style.display=has?'grid':'none';
-  document.getElementById('live-tag').style.display=has?'flex':'none';
-  document.getElementById('ref-btn').style.display=has?'inline-flex':'none';
-  if (has){ensureUsdTryCard(); ensureSortBar(); ensureExportBtn();}  // UV #13 & #14
+  var has = stocks.length > 0;
+  document.getElementById('empty-state').style.display = has ? 'none'        : 'flex';
+  document.getElementById('sbar').style.display        = has ? 'grid'        : 'none';
+  document.getElementById('live-tag').style.display    = has ? 'flex'        : 'none';
+  document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
+
+  if (has) {
+    ensureUsdTryCard(); ensureSortBar(); ensureExportBtn();
+  } else {
+    // Tüm hisseler kaldırılınca yardımcı elemanları gizle
+    var sb  = document.getElementById('sort-bar');
+    var eb  = document.getElementById('export-btn');
+    var kur = document.getElementById('card-USDTRY');
+    if (sb)  sb.style.display  = 'none';
+    if (eb)  eb.style.display  = 'none';
+    if (kur) kur.style.display = 'none';
+  }
+
   updateSummary();
 }
 function updateSummary() {
@@ -698,7 +716,7 @@ function openModal() {
   document.getElementById('overlay').classList.add('open');
   document.getElementById('search-inp').value=''; document.getElementById('m-sym').value='';
   document.getElementById('m-name').value=''; document.getElementById('cerr').style.display='none';
-  curTab='bist'; showOnlyDiv=false;
+  showOnlyDiv=false;
   var btn=document.getElementById('div-filter-btn'); if(btn)btn.classList.remove('active');
   filterList(); setTimeout(()=>document.getElementById('search-inp').focus(),60);
 }
