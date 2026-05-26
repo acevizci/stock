@@ -351,6 +351,86 @@ function renderNoteBadge(sym) {
 }
 
 // ── Mum Grafik (Candlestick) ──
+// ── Mini Mum Grafik (kart içi) ──────────────────
+function renderMiniCandle(chartArea, sym, d) {
+  var bars = (d.ohlcv || []).filter(function(b) {
+    return b.o != null && b.high != null && b.low != null && b.close != null;
+  });
+
+  // Son N barı göster (kart genişliğine göre)
+  var MAX = 60;
+  if (bars.length > MAX) bars = bars.slice(bars.length - MAX);
+
+  if (bars.length < 2) {
+    chartArea.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted2)">Veri yükleniyor...</div>';
+    return;
+  }
+
+  var W  = 260, H  = 72;   // viewBox — SVG responsive ile gerçek boyuta uzar
+  var PT = 3,   PB = 14;   // üst / alt boşluk (alt: hacim için)
+  var chartH = H - PT - PB;
+  var VOL_H  = 10;          // hacim şeridi yüksekliği (alt)
+  var N      = bars.length;
+  var step   = W / N;
+  var barW   = Math.max(1.5, step * 0.65);
+
+  function bx(i) { return i * step + step / 2; }
+
+  // Fiyat skalası
+  var maxP = Math.max.apply(null, bars.map(function(b){ return b.high; }));
+  var minP = Math.min.apply(null, bars.map(function(b){ return b.low;  }));
+  var prng  = maxP - minP || 1;
+  var ppad  = prng * 0.08;
+  var pMax  = maxP + ppad, pMin = minP - ppad;
+  function py(p){ return PT + (pMax - p) / (pMax - pMin) * chartH; }
+
+  // Hacim skalası
+  var maxVol = Math.max.apply(null, bars.map(function(b){ return b.volume||0; })) || 1;
+  var volTop = H - VOL_H;
+  function vy(v){ return volTop + VOL_H - (v / maxVol) * VOL_H; }
+
+  var UP = '#10b981', DN = '#f43f5e';
+  var parts = '';
+
+  bars.forEach(function(bar, i) {
+    var x     = bx(i);
+    var bull  = bar.close >= bar.o;
+    var col   = bull ? UP : DN;
+    var bodyT = py(Math.max(bar.o, bar.close));
+    var bodyB = py(Math.min(bar.o, bar.close));
+    var bodyH = Math.max(1, bodyB - bodyT);
+    var hw    = Math.max(0.8, barW / 2);
+
+    // Hacim
+    if (bar.volume) {
+      parts += '<rect x="'+(x-hw)+'" y="'+vy(bar.volume)+'" width="'+(hw*2)+'" height="'+(H-vy(bar.volume))+'" fill="'+col+'" opacity="0.22" rx="0.5"/>';
+    }
+    // Fitil
+    parts += '<line x1="'+x+'" y1="'+py(bar.high)+'" x2="'+x+'" y2="'+bodyT+'" stroke="'+col+'" stroke-width="0.8" opacity="0.7"/>';
+    parts += '<line x1="'+x+'" y1="'+bodyB+'" x2="'+x+'" y2="'+py(bar.low)+'" stroke="'+col+'" stroke-width="0.8" opacity="0.7"/>';
+    // Gövde
+    parts += '<rect x="'+(x-hw)+'" y="'+bodyT+'" width="'+(hw*2)+'" height="'+bodyH+'" fill="'+col+'" rx="0.4"/>';
+  });
+
+  // Hacim ayırıcı
+  parts += '<line x1="0" y1="'+volTop+'" x2="'+W+'" y2="'+volTop+'" stroke="rgba(255,255,255,.05)" stroke-width="0.5"/>';
+
+  // Son kapanış fiyatı — sağ kenar etiketi
+  var last  = bars[bars.length - 1];
+  var lastY = py(last.close);
+  var lCol  = last.close >= last.o ? UP : DN;
+  // Yatay referans çizgisi
+  parts += '<line x1="0" y1="'+lastY+'" x2="'+W+'" y2="'+lastY+'" stroke="'+lCol+'" stroke-width="0.6" stroke-dasharray="2,2" opacity="0.5"/>';
+
+  // Expand ikonu — sağ alt
+  var expandIcon = '<div class="chart-expand-hint"><i class="ti ti-arrows-maximize"></i></div>';
+
+  chartArea.innerHTML =
+    '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="100%" preserveAspectRatio="none" style="display:block">'+
+      parts +
+    '</svg>' + expandIcon;
+}
+
 // ── Grafik Modalı ──────────────────────────────
 var _chartModalSym = null;
 
@@ -774,9 +854,9 @@ function makeSkeletonCard(sym, name, exch) {
     '<div class="c-badges"><span class="badge loading">Veri çekiliyor...</span></div>'+
     '<div id="tgt-badges-'+sym+'" class="tgt-badges-row"></div>'+
     '<div class="range-bar">' + rangeBtns + '</div>'+
-    '<div class="chart-area chart-clickable" id="chart-area-'+sym+'" onclick="openChartModal(\''+sym+'\')" title="Mum grafik için tıkla">'+
-      '<canvas id="cv-'+sym+'" aria-label="'+sym+' grafik"></canvas>'+
-      '<div class="chart-expand-hint"><i class="ti ti-chart-candle"></i></div>'+
+    '<div class="chart-area chart-clickable" id="chart-area-'+sym+'" onclick="openChartModal(\''+sym+'\')" title="Detaylı grafik için tıkla">'+
+      '<div class="mini-candle-skel"><div class="skel-box" style="width:100%;height:100%;border-radius:4px;opacity:.4"></div></div>'+
+      '<div class="chart-expand-hint"><i class="ti ti-arrows-maximize"></i></div>'+
     '</div>'+
     '<div class="sep"></div>'+
     '<div class="c-meta">'+
@@ -871,42 +951,9 @@ function updateCard(s, prevPrice) {
   renderSectorTag(s.symbol);
   renderNoteBadge(s.symbol);
 
-  // ── Sparkline ──
+  // ── Mini Mum Grafik ──
   var chartArea = document.getElementById('chart-area-' + s.symbol);
-  if (chartArea && !document.getElementById('cv-' + s.symbol)) {
-    // canvas silinmişse yeniden oluştur
-    var newCanvas = document.createElement('canvas');
-    newCanvas.id = 'cv-' + s.symbol;
-    newCanvas.setAttribute('aria-label', s.symbol + ' grafik');
-    chartArea.insertBefore(newCanvas, chartArea.firstChild);
-  }
-  var hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
-  histories[s.symbol] = hist;
-  var cc = chartCol(D), cb = chartBg(D);
-  if (charts[s.symbol]) {
-    var ch = charts[s.symbol];
-    ch.data.labels = hist.map(function() { return ''; });
-    ch.data.datasets[0].data            = hist;
-    ch.data.datasets[0].borderColor     = cc;
-    ch.data.datasets[0].backgroundColor = cb;
-    ch.update('none');
-  } else {
-    var ctx = document.getElementById('cv-' + s.symbol);
-    if (ctx) {
-      charts[s.symbol] = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: hist.map(function() { return ''; }),
-          datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: false,
-          plugins: { legend: { display: false }, tooltip: { enabled: false } },
-          scales:  { x: { display: false }, y: { display: false, grace: '8%' } },
-        },
-      });
-    }
-  }
+  if (chartArea) renderMiniCandle(chartArea, s.symbol, d);
 
   // Modal açıksa yenile
   if (_chartModalSym === s.symbol) _renderFullChart(s.symbol, d);
@@ -951,7 +998,7 @@ async function retryFetch(sym) {
 }
 
 function removeStock(sym) {
-  if (charts[sym]){charts[sym].destroy();delete charts[sym];}
+  if (charts[sym]) { charts[sym].destroy(); delete charts[sym]; }
   delete histories[sym]; delete chartRanges[sym];
   // notesData, sectorData, portfolioData, targetData kasıtlı korunuyor
   stocks=stocks.filter(s=>s.symbol!==sym); saveToStorage();
