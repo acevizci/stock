@@ -15,7 +15,7 @@ let BIST_LIST = (() => {
 
 
 // ── State ──
-let stocks = [], charts = {}, histories = {};
+let stocks = [], charts = {}, histories = {}, chartRanges = {};
 let curTab = 'bist', notifOn = false, toastT = null, showOnlyDiv = false;
 if ('Notification' in window && Notification.permission === 'granted') notifOn = true;
 
@@ -104,9 +104,13 @@ async function fetchBistList() {
 
 
 // ── Veri cekme ──
-async function fetchStockPrice(symbol, exchange) {
+async function fetchStockPrice(symbol, exchange, range) {
+  range = range || '1y';
+  // 5 yıllık veri için haftalık bar; daha kısa aralıklarda günlük
+  var interval = range === '5y' ? '1wk' : '1d';
   const ticker = exchange === 'BIST' ? symbol + '.IS' : symbol;
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1d&range=1y';
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+              + ticker + '?interval=' + interval + '&range=' + range;
   const data   = await fetchWithFallback(url);
   const result = data?.chart?.result?.[0];
   if (!result) throw new Error('Sembol bulunamadi');
@@ -184,6 +188,12 @@ async function fetchStockPrice(symbol, exchange) {
     dividendYield,
     currency: meta.currency || (exchange === 'BIST' ? 'TRY' : 'USD'),
     closes,
+    // ── Yeni finansal alanlar ──
+    weekHigh52: meta.fiftyTwoWeekHigh || null,
+    weekLow52:  meta.fiftyTwoWeekLow  || null,
+    avgVolume:  meta.averageDailyVolume10Day || meta.averageDailyVolume3Month || null,
+    marketCap:  meta.marketCap || null,
+    eps:        meta.epsTrailingTwelveMonths || null,
   };
 }
 
@@ -204,6 +214,28 @@ function fmtVol(v) {
 function dirOf(c)    { return c > 0.001 ? 'up' : c < -0.001 ? 'down' : 'neutral'; }
 function chartCol(d) { return d === 'up' ? '#10b981' : d === 'down' ? '#f43f5e' : '#64748b'; }
 function chartBg(d)  { return d === 'up' ? 'rgba(16,185,129,.08)' : d === 'down' ? 'rgba(244,63,94,.08)' : 'rgba(100,116,139,.05)'; }
+
+// Piyasa değeri formatı (TL/USD)
+function fmtMcap(v, cur) {
+  if (!v) return '-';
+  var s = cur === 'TRY' ? ' TL' : '$';
+  if (v >= 1e12) return (v / 1e12).toFixed(2) + ' Tr' + s;
+  if (v >= 1e9)  return (v / 1e9).toFixed(2)  + ' Mr' + s;
+  if (v >= 1e6)  return (v / 1e6).toFixed(1)  + ' Mn' + s;
+  return String(Math.round(v)) + s;
+}
+// F/K oranı metni
+function peStr(price, eps) {
+  if (eps == null || eps === 0) return '-';
+  var pe = price / eps;
+  if (pe < 0) return 'Zarar';
+  return pe.toFixed(1) + '×';
+}
+// Hacim / ortalama hacim oranı
+function volRatioStr(vol, avg) {
+  if (!avg || !vol) return '';
+  return (vol / avg).toFixed(1) + '× ort.';
+}
 
 // ── Bildirim ──
 function updateBellUI() {
@@ -242,8 +274,41 @@ function maybeNotify(s, oldPrice) {
   }
 }
 
+// ── Grafik zaman aralığı değiştirme ──
+async function changeRange(sym, range) {
+  chartRanges[sym] = range;
+  // Kart üzerindeki buton durumunu güncelle
+  var card = document.getElementById('card-' + sym);
+  if (card) {
+    card.querySelectorAll('.range-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.range === range);
+    });
+    // Yükleniyor göstergesi — chart üzerine overlay yerine basit renk değişimi
+    var ca = card.querySelector('.chart-area');
+    if (ca) ca.style.opacity = '.4';
+  }
+  var s = stocks.find(function(x) { return x.symbol === sym; });
+  if (!s) return;
+  try {
+    s.data = await fetchStockPrice(sym, s.exchange, range);
+    updateCard(s, null);
+    if (card) { var ca2 = card.querySelector('.chart-area'); if (ca2) ca2.style.opacity = ''; }
+  } catch (e) {
+    console.warn('[Range] Değişim başarısız:', sym, e.message);
+    if (card) { var ca3 = card.querySelector('.chart-area'); if (ca3) ca3.style.opacity = ''; }
+  }
+}
+
 // ── Card ──
 function makeSkeletonCard(sym, name, exch) {
+  var activeRange = chartRanges[sym] || '1y';
+  var RLABELS = { '1mo':'1A', '3mo':'3A', '6mo':'6A', '1y':'1Y', '5y':'5Y' };
+  var rangeBtns = Object.keys(RLABELS).map(function(r) {
+    return '<button class="range-btn' + (r === activeRange ? ' active' : '') +
+           '" data-range="' + r + '" onclick="changeRange(\'' + sym + '\',\'' + r + '\')">' +
+           RLABELS[r] + '</button>';
+  }).join('');
+
   const d = document.createElement('div');
   d.className = 'card';
   d.id = 'card-' + sym;
@@ -257,12 +322,20 @@ function makeSkeletonCard(sym, name, exch) {
     '</div>' +
     '<div class="c-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>' +
     '<div class="c-badges"><span class="badge loading">Veri cekiliyor...</span></div>' +
+    '<div class="range-bar">' + rangeBtns + '</div>' +
     '<div class="chart-area"><canvas id="cv-' + sym + '" aria-label="' + sym + ' grafik"></canvas></div>' +
     '<div class="sep"></div>' +
     '<div class="c-meta">' +
-      '<div class="m-col"><div class="m-lbl">Yuksek</div><div class="m-val" data-k="high-today">-</div><div class="m-val m-prev" data-k="high-prev">-</div></div>' +
-      '<div class="m-col"><div class="m-lbl">Dusuk</div><div class="m-val" data-k="low-today">-</div><div class="m-val m-prev" data-k="low-prev">-</div></div>' +
-      '<div class="m-col"><div class="m-lbl">Hacim</div><div class="m-val" data-k="vol-today">-</div><div class="m-val m-prev" data-k="vol-prev">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Yüksek</div><div class="m-val" data-k="high-today">-</div><div class="m-val m-prev" data-k="high-prev">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Düşük</div><div class="m-val" data-k="low-today">-</div><div class="m-val m-prev" data-k="low-prev">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Hacim</div><div class="m-val" data-k="vol-today">-</div><div class="m-val m-prev" data-k="vol-prev">-</div><div class="vol-ratio" data-k="vol-ratio"></div></div>' +
+    '</div>' +
+    '<div class="sep"></div>' +
+    '<div class="c-meta2">' +
+      '<div class="m-col"><div class="m-lbl">52H Yük</div><div class="m-val" data-k="h52-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">52H Düş</div><div class="m-val" data-k="h52-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Piy. Değ.</div><div class="m-val" data-k="mcap">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">F/K</div><div class="m-val" data-k="pe">-</div></div>' +
     '</div>';
   return d;
 }
@@ -307,10 +380,32 @@ function updateCard(s, prevPrice) {
   if (g('low-today'))  g('low-today').textContent  = fmt(d.low,    d.currency);
   if (g('vol-today'))  g('vol-today').textContent  = fmtVol(d.volume);
 
+  // Hacim / ortalama hacim oranı
+  var vr = g('vol-ratio');
+  if (vr) {
+    var ratio = volRatioStr(d.volume, d.avgVolume);
+    vr.textContent  = ratio;
+    vr.className    = 'vol-ratio' + (d.avgVolume && d.volume > d.avgVolume * 1.5 ? ' high' : '');
+  }
+
   if (d.yesterday) {
     if (g('high-prev')) g('high-prev').textContent = fmt(d.yesterday.high,   d.currency);
     if (g('low-prev'))  g('low-prev').textContent  = fmt(d.yesterday.low,    d.currency);
     if (g('vol-prev'))  g('vol-prev').textContent  = fmtVol(d.yesterday.volume);
+  }
+
+  // 52 haftalık yüksek / düşük
+  if (g('h52-high')) g('h52-high').textContent = fmt(d.weekHigh52, d.currency);
+  if (g('h52-low'))  g('h52-low').textContent  = fmt(d.weekLow52,  d.currency);
+
+  // Piyasa değeri
+  if (g('mcap')) g('mcap').textContent = fmtMcap(d.marketCap, d.currency);
+
+  // F/K oranı
+  if (g('pe')) {
+    var peVal = peStr(d.price, d.eps);
+    g('pe').textContent = peVal;
+    g('pe').style.color = peVal === 'Zarar' ? 'var(--dn)' : '';
   }
 
   var hist = d.closes.length ? d.closes : (histories[s.symbol] || [d.price]);
@@ -360,7 +455,8 @@ function setError(sym, msg) {
 // ── Ekle / Kaldir / Yenile ──
 async function addStock(sym, name, exch) {
   if (stocks.find(function(s) { return s.symbol === sym; })) return;
-  histories[sym] = [];
+  histories[sym]    = [];
+  chartRanges[sym]  = chartRanges[sym] || '1y'; // varsayılan 1 yıl
   var s = { symbol: sym, name: name, exchange: exch, data: null };
   stocks.push(s);
   saveToStorage();
@@ -368,7 +464,7 @@ async function addStock(sym, name, exch) {
   renderUI();
   document.getElementById('grid').appendChild(makeSkeletonCard(sym, name, exch));
   try {
-    s.data = await fetchStockPrice(sym, exch);
+    s.data = await fetchStockPrice(sym, exch, chartRanges[sym] || '1y');
     updateCard(s, null);
     updateSummary();
     setUpd();
@@ -383,7 +479,7 @@ async function retryFetch(sym) {
   var b = document.querySelector('#card-' + sym + ' .badge');
   if (b) { b.textContent = 'Yeniden deneniyor...'; b.className = 'badge loading'; b.onclick = null; }
   try {
-    s.data = await fetchStockPrice(sym, s.exchange);
+    s.data = await fetchStockPrice(sym, s.exchange, chartRanges[sym] || '1y');
     updateCard(s, null);
     updateSummary();
     setUpd();
@@ -395,6 +491,7 @@ async function retryFetch(sym) {
 function removeStock(sym) {
   if (charts[sym]) { charts[sym].destroy(); delete charts[sym]; }
   delete histories[sym];
+  delete chartRanges[sym];
   stocks = stocks.filter(function(s) { return s.symbol !== sym; });
   saveToStorage();
   var c = document.getElementById('card-' + sym);
@@ -414,7 +511,7 @@ async function refreshAll() {
     var b   = document.querySelector('#card-' + s.symbol + ' .badge');
     if (b) { b.textContent = 'Guncelleniyor...'; b.className = 'badge loading'; }
     try {
-      s.data = await fetchStockPrice(s.symbol, s.exchange);
+      s.data = await fetchStockPrice(s.symbol, s.exchange, chartRanges[s.symbol] || '1y');
       updateCard(s, old);
       maybeNotify(s, old);
     } catch (e) {

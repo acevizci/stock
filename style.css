@@ -404,6 +404,32 @@ body {
 }
 #file-warn a { color: #fbbf24; }
 
+/* ── Range selector ── */
+.range-bar {
+  display: flex; gap: 4px; margin: 10px 0 6px;
+}
+.range-btn {
+  flex: 1; padding: 4px 0; font-size: 10px; font-weight: 600;
+  font-family: var(--mono); letter-spacing: .04em;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--muted); cursor: pointer;
+  transition: all .15s;
+}
+.range-btn:hover  { background: var(--surface3); color: var(--text2); border-color: var(--border2); }
+.range-btn.active { background: var(--surface3); color: var(--text);  border-color: var(--border3); }
+
+/* ── 52H + Fundamentals row ── */
+.c-meta2 {
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 10px;
+}
+
+/* ── Hacim ortalama oranı ── */
+.vol-ratio {
+  font-size: 9px; font-weight: 600; color: var(--muted2);
+  font-family: var(--mono); letter-spacing: .03em; margin-top: 3px;
+}
+.vol-ratio.high { color: var(--accent); }
+
 /* ── Responsive ── */
 @media (max-width: 560px) {
   .app-shell { padding: 1.25rem 1rem 3rem; }
