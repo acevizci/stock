@@ -22,7 +22,9 @@
   --muted:     #64748b;
   --muted2:    #475569;
 
-  --accent:    #3b82f6;
+  --gold:      #f59e0b;
+  --gold-bg:   rgba(245,158,11,.10);
+  --gold-glow: rgba(245,158,11,.22);
   --accent2:   #6366f1;
   --accent-bg: rgba(59,130,246,.10);
   --accent-glow: rgba(59,130,246,.20);
@@ -495,7 +497,20 @@ body {
   border: 1px solid var(--border2);
 }
 
-/* ── Sort bar (UV #13) ── */
+/* ── Altın kartı ── */
+.gold-card { border-color: rgba(245,158,11,.22); }
+.gold-card::before { background: linear-gradient(90deg, transparent, var(--gold-glow), transparent); }
+.gold-card::after  { background: radial-gradient(circle, var(--gold-glow), transparent 70%); }
+.gold-card.up::before    { background: linear-gradient(90deg, transparent, var(--up-glow), transparent); }
+.gold-card.up::after     { background: radial-gradient(circle, var(--up-glow), transparent 70%); }
+.gold-card.down::before  { background: linear-gradient(90deg, transparent, var(--dn-glow), transparent); }
+.gold-card.down::after   { background: radial-gradient(circle, var(--dn-glow), transparent 70%); }
+
+/* İkincil fiyat (ons USD) */
+.gold-sub {
+  font-size: 11px; font-family: var(--mono); color: var(--muted);
+  margin-top: -4px; margin-bottom: 2px; letter-spacing: .01em;
+}
 .sort-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin-bottom: 12px; padding: 8px 12px;

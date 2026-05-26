@@ -15,7 +15,7 @@ let BIST_LIST = (() => {
 
 // ── State ──
 let stocks = [], charts = {}, histories = {}, chartRanges = {}, chartMode = {};
-let portfolioData = {}, targetData = {}, usdtryRate = null;
+let portfolioData = {}, targetData = {}, usdtryRate = null, goldData = null;
 let notesData = {}, sectorData = {};       // UV #11 & #12
 let currentSort = 'added';                 // UV #13
 let notifOn = false, toastT = null, showOnlyDiv = false;
@@ -405,10 +405,176 @@ function updateUsdTryCard() {
       portEl.style.display = 'none';
     }
   }
+  // Kur değişince gram TRY fiyatını da yenile
+  if (typeof updateGoldCard === 'function') updateGoldCard();
 }
 function ensureUsdTryCard() {
   if (!document.getElementById('card-USDTRY')) {
     var grid=document.getElementById('grid'); grid.insertBefore(makeUsdTrySkeletonCard(),grid.firstChild); fetchUsdTryRate();
+  }
+}
+
+// ── Altın Kartı ─────────────────────────────────
+var TROY_OZ_TO_GRAM = 31.1035; // 1 troy ons = 31.1035 gram
+
+async function fetchGoldRate() {
+  try {
+    // GC=F: Comex Gold Futures — USD/troy ons
+    var data   = await fetchWithFallback('https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=1mo');
+    var result = data?.chart?.result?.[0]; if (!result) return;
+    var meta   = result.meta, priceOz = meta.regularMarketPrice; if (!priceOz) return;
+    var prev   = meta.chartPreviousClose || meta.previousClose || priceOz;
+    var q      = result.indicators?.quote?.[0] || {};
+    var closesOz = (q.close || []).filter(v => v != null);
+    var highsOz  = (q.high  || []).filter(v => v != null);
+    var lowsOz   = (q.low   || []).filter(v => v != null);
+
+    goldData = {
+      priceOz,
+      priceGram:    priceOz / TROY_OZ_TO_GRAM,
+      change:       priceOz - prev,
+      changePct:    ((priceOz - prev) / prev) * 100,
+      dayHighOz:    meta.regularMarketDayHigh  || (highsOz.length ? highsOz[highsOz.length-1] : null),
+      dayLowOz:     meta.regularMarketDayLow   || (lowsOz.length  ? lowsOz[lowsOz.length-1]  : null),
+      monthHighOz:  highsOz.length ? Math.max.apply(null, highsOz) : null,
+      monthLowOz:   lowsOz.length  ? Math.min.apply(null, lowsOz)  : null,
+      weekChange:   closesOz.length >= 6
+        ? ((priceOz - closesOz[closesOz.length-6]) / closesOz[closesOz.length-6]) * 100
+        : null,
+      closesOz,
+    };
+    updateGoldCard();
+  } catch(e) { console.warn('[Altın]', e.message); }
+}
+
+function makeGoldSkeletonCard() {
+  var d = document.createElement('div');
+  d.className = 'card gold-card'; d.id = 'card-GOLD';
+  d.innerHTML =
+    '<div class="c-hdr">' +
+      '<div>' +
+        '<div class="c-sym"><i class="ti ti-currency-dollar" style="font-size:13px;opacity:.7"></i> Altın <span class="c-xch">XAU</span></div>' +
+        '<div class="c-name">Ons / Gram</div>' +
+      '</div>' +
+      '<div class="live-dot" style="flex-shrink:0;margin-top:4px;background:var(--gold);box-shadow:0 0 6px var(--gold)"></div>' +
+    '</div>' +
+    // Ana fiyat: gram TRY (varsa) veya ons USD
+    '<div class="c-price" id="gold-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>' +
+    '<div class="c-badges" id="gold-badges"><span class="badge loading">Yükleniyor...</span></div>' +
+    // İkincil fiyat (ons USD)
+    '<div class="gold-sub" id="gold-sub"></div>' +
+    '<div class="chart-area" id="chart-area-GOLD"><canvas id="cv-GOLD" aria-label="Altın grafik"></canvas></div>' +
+    '<div class="sep"></div>' +
+    '<div class="c-meta">' +
+      '<div class="m-col"><div class="m-lbl">Günlük Yük</div><div class="m-val" id="gold-day-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Günlük Düş</div><div class="m-val" id="gold-day-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Değişim</div><div class="m-val" id="gold-change">-</div></div>' +
+    '</div>' +
+    '<div class="sep"></div>' +
+    '<div class="c-meta">' +
+      '<div class="m-col"><div class="m-lbl">1A Yüksek</div><div class="m-val" id="gold-mo-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">1A Düşük</div><div class="m-val" id="gold-mo-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Haftalık</div><div class="m-val" id="gold-wk-chg">-</div></div>' +
+    '</div>';
+  return d;
+}
+
+function updateGoldCard() {
+  if (!goldData) return;
+  var priceEl  = document.getElementById('gold-price');
+  var badgesEl = document.getElementById('gold-badges');
+  if (!priceEl) return;
+
+  var g   = goldData;
+  var D   = g.changePct > 0.01 ? 'up' : g.changePct < -0.01 ? 'down' : 'neutral';
+  var card = document.getElementById('card-GOLD');
+  if (card) card.className = 'card gold-card ' + D;
+
+  var elG = function(id) { return document.getElementById(id); };
+
+  // Gram TRY (kur varsa), yoksa ons USD
+  var hasTry  = usdtryRate && usdtryRate.price > 0;
+  var gramTry = hasTry ? (g.priceGram * usdtryRate.price) : null;
+  var ozUsd   = g.priceOz;
+
+  if (gramTry != null) {
+    priceEl.textContent = gramTry.toLocaleString('tr-TR', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' TL/gr';
+    if (elG('gold-sub')) elG('gold-sub').textContent = '$' + ozUsd.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + '/oz';
+  } else {
+    priceEl.textContent = '$' + ozUsd.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + '/oz';
+    if (elG('gold-sub')) elG('gold-sub').textContent = '';
+  }
+
+  // Badge
+  if (badgesEl) {
+    var arrow  = D === 'up' ? '+' : D === 'down' ? '-' : '';
+    var pctTxt = arrow + ' ' + Math.abs(g.changePct).toFixed(2) + '%';
+    var amtTxt = (g.change >= 0 ? '+' : '') + '$' + Math.abs(g.change).toFixed(2);
+    badgesEl.innerHTML =
+      '<span class="badge ' + D + '">' + pctTxt + '</span>' +
+      '<span class="badge neutral kur-amt">' + amtTxt + '</span>';
+  }
+
+  // Stat satırları — ons bazında göster
+  var fmtOz  = function(v) { return v != null ? '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '-'; };
+  if (elG('gold-day-high')) elG('gold-day-high').textContent = fmtOz(g.dayHighOz);
+  if (elG('gold-day-low'))  elG('gold-day-low').textContent  = fmtOz(g.dayLowOz);
+  if (elG('gold-change')) {
+    elG('gold-change').textContent = (g.change >= 0 ? '+' : '') + '$' + Math.abs(g.change).toFixed(2);
+    elG('gold-change').style.color = D === 'up' ? 'var(--up)' : D === 'down' ? 'var(--dn)' : '';
+  }
+  if (elG('gold-mo-high')) elG('gold-mo-high').textContent = fmtOz(g.monthHighOz);
+  if (elG('gold-mo-low'))  elG('gold-mo-low').textContent  = fmtOz(g.monthLowOz);
+  if (elG('gold-wk-chg') && g.weekChange != null) {
+    var wD    = g.weekChange > 0 ? 'up' : g.weekChange < 0 ? 'down' : 'neutral';
+    var wSign = g.weekChange >= 0 ? '+' : '';
+    elG('gold-wk-chg').textContent = wSign + g.weekChange.toFixed(2) + '%';
+    elG('gold-wk-chg').style.color = wD === 'up' ? 'var(--up)' : wD === 'down' ? 'var(--dn)' : '';
+  }
+
+  // Sparkline (ons kapanış fiyatları)
+  var hist = g.closesOz;
+  if (hist.length) {
+    var cc = chartCol(D), cb = chartBg(D);
+    if (charts['GOLD']) {
+      var ch = charts['GOLD'];
+      ch.data.labels = hist.map(function() { return ''; });
+      ch.data.datasets[0].data            = hist;
+      ch.data.datasets[0].borderColor     = cc;
+      ch.data.datasets[0].backgroundColor = cb;
+      ch.update('none');
+    } else {
+      var ctx = document.getElementById('cv-GOLD');
+      if (ctx) {
+        charts['GOLD'] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: hist.map(function() { return ''; }),
+            datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales:  { x: { display: false }, y: { display: false, grace: '8%' } },
+          },
+        });
+      }
+    }
+  }
+}
+
+function ensureGoldCard() {
+  if (!document.getElementById('card-GOLD')) {
+    var grid = document.getElementById('grid');
+    var kurCard = document.getElementById('card-USDTRY');
+    var goldCard = makeGoldSkeletonCard();
+    // USD/TRY kartının hemen arkasına ekle
+    if (kurCard && kurCard.nextSibling) {
+      grid.insertBefore(goldCard, kurCard.nextSibling);
+    } else {
+      grid.insertBefore(goldCard, grid.firstChild);
+    }
+    fetchGoldRate();
   }
 }
 
@@ -1126,6 +1292,7 @@ async function refreshAll() {
   var btn=document.getElementById('ref-btn'),icon=document.getElementById('ref-icon');
   btn.disabled=true; icon.style.animation='spin 1s linear infinite';
   fetchUsdTryRate();
+  fetchGoldRate();
   await Promise.all(stocks.map(async s=>{
     var old=s.data?s.data.price:null;
     var b=document.querySelector('#card-'+s.symbol+' .badge');
@@ -1147,15 +1314,17 @@ function renderUI() {
   document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
 
   if (has) {
-    ensureUsdTryCard(); ensureSortBar(); ensureExportBtn();
+    ensureUsdTryCard(); ensureGoldCard(); ensureSortBar(); ensureExportBtn();
   } else {
     // Tüm hisseler kaldırılınca yardımcı elemanları gizle
-    var sb  = document.getElementById('sort-bar');
-    var eb  = document.getElementById('export-btn');
-    var kur = document.getElementById('card-USDTRY');
-    if (sb)  sb.style.display  = 'none';
-    if (eb)  eb.style.display  = 'none';
-    if (kur) kur.style.display = 'none';
+    var sb   = document.getElementById('sort-bar');
+    var eb   = document.getElementById('export-btn');
+    var kur  = document.getElementById('card-USDTRY');
+    var gold = document.getElementById('card-GOLD');
+    if (sb)   sb.style.display   = 'none';
+    if (eb)   eb.style.display   = 'none';
+    if (kur)  kur.style.display  = 'none';
+    if (gold) gold.style.display = 'none';
   }
 
   updateSummary();
