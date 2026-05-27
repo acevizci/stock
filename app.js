@@ -587,13 +587,190 @@ function ensureGoldCard() {
     var grid = document.getElementById('grid');
     var kurCard = document.getElementById('card-USDTRY');
     var goldCard = makeGoldSkeletonCard();
-    // USD/TRY kartının hemen arkasına ekle
     if (kurCard && kurCard.nextSibling) {
       grid.insertBefore(goldCard, kurCard.nextSibling);
     } else {
       grid.insertBefore(goldCard, grid.firstChild);
     }
     fetchGoldRate();
+  }
+}
+
+// ── Ekonomi Takvimi (Madde 5) ───────────────────
+var econData     = [];
+var econFilter   = 'TR';   // 'TR' | 'ALL'
+var ECON_CACHE_KEY = 'econ_cache';
+var ECON_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 saat
+
+// Önem seviyesi Türkçe etiketleri
+var IMPACT_LABEL = { High: 'Yüksek', Medium: 'Orta', Low: 'Düşük' };
+var IMPACT_CLS   = { High: 'econ-high', Medium: 'econ-med', Low: 'econ-low' };
+
+// TR olaylarında öne çıkan anahtar kelimeler
+var TR_KEYWORDS = ['turkey','türkiye','tcmb','tüik','tuik','cpi','ppi','gdp','rate','inflation','trade','unemployment','industrial'];
+
+async function fetchEconCalendar() {
+  // Önbellek kontrolü
+  try {
+    var cached = JSON.parse(localStorage.getItem(ECON_CACHE_KEY) || 'null');
+    if (cached && Date.now() - cached.ts < ECON_CACHE_TTL && cached.data.length > 0) {
+      econData = cached.data;
+      renderEconCard();
+      return;
+    }
+  } catch(_) {}
+
+  // Bugün + 14 gün aralığı
+  var from = new Date();
+  var to   = new Date(Date.now() + 14 * 24 * 3600 * 1000);
+  var fmt  = function(d) { return d.toISOString().slice(0, 10); };
+  var url  = WORKER_URL + '/fmp/economic_calendar?from=' + fmt(from) + '&to=' + fmt(to);
+
+  try {
+    var res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var raw = await res.json();
+    if (!Array.isArray(raw)) throw new Error('Geçersiz yanıt');
+
+    // TR filtresi: country === 'TR' veya anahtar kelime eşleşmesi
+    econData = raw.filter(function(e) {
+      var country = (e.country || '').toUpperCase();
+      var event   = (e.event   || '').toLowerCase();
+      return country === 'TR' ||
+             TR_KEYWORDS.some(function(kw) { return event.includes(kw); });
+    }).sort(function(a, b) { return new Date(a.date) - new Date(b.date); });
+
+    // Önbelleğe kaydet
+    localStorage.setItem(ECON_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: econData }));
+    renderEconCard();
+  } catch(e) {
+    console.warn('[EkonomiTakvim]', e.message);
+    // Önbellekte eski veri varsa onu kullan
+    try {
+      var old = JSON.parse(localStorage.getItem(ECON_CACHE_KEY) || 'null');
+      if (old && old.data.length > 0) { econData = old.data; renderEconCard(); }
+    } catch(_) {}
+  }
+}
+
+function makeEconSkeletonCard() {
+  var d = document.createElement('div');
+  d.className = 'card econ-card'; d.id = 'card-ECON';
+  d.innerHTML =
+    '<div class="c-hdr">' +
+      '<div>' +
+        '<div class="c-sym"><i class="ti ti-calendar-event" style="font-size:13px;opacity:.8"></i> Takvim</div>' +
+        '<div class="c-name">Ekonomik Olaylar</div>' +
+      '</div>' +
+      '<div class="econ-filter-wrap">' +
+        '<button class="econ-filter-btn active" id="econ-btn-tr"  onclick="setEconFilter(\'TR\')">🇹🇷 TR</button>' +
+        '<button class="econ-filter-btn"         id="econ-btn-all" onclick="setEconFilter(\'ALL\')">Tümü</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="econ-list" id="econ-list">' +
+      '<div class="econ-loading"><div class="skel-box" style="width:100%;height:14px;border-radius:4px"></div>' +
+      '<div class="skel-box" style="width:80%;height:14px;border-radius:4px;margin-top:8px"></div>' +
+      '<div class="skel-box" style="width:90%;height:14px;border-radius:4px;margin-top:8px"></div></div>' +
+    '</div>';
+  return d;
+}
+
+function setEconFilter(f) {
+  econFilter = f;
+  document.getElementById('econ-btn-tr') .classList.toggle('active', f === 'TR');
+  document.getElementById('econ-btn-all').classList.toggle('active', f === 'ALL');
+  renderEconCard();
+}
+
+function renderEconCard() {
+  var listEl = document.getElementById('econ-list'); if (!listEl) return;
+
+  var items = econFilter === 'TR'
+    ? econData.filter(function(e) {
+        var country = (e.country || '').toUpperCase();
+        var event   = (e.event   || '').toLowerCase();
+        return country === 'TR' || TR_KEYWORDS.some(function(kw){ return event.includes(kw); });
+      })
+    : econData;
+
+  if (!items.length) {
+    listEl.innerHTML = '<div class="econ-empty">Yaklaşan ekonomik olay bulunamadı.</div>';
+    return;
+  }
+
+  // Tarihe göre grupla
+  var groups = {};
+  items.forEach(function(e) {
+    var day = (e.date || '').slice(0, 10); // YYYY-MM-DD
+    if (!groups[day]) groups[day] = [];
+    groups[day].push(e);
+  });
+
+  var today    = new Date().toISOString().slice(0, 10);
+  var tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  var html = '';
+  Object.keys(groups).sort().forEach(function(day) {
+    var label = day === today    ? 'Bugün'
+              : day === tomorrow ? 'Yarın'
+              : new Date(day + 'T12:00:00').toLocaleDateString('tr-TR', { day:'numeric', month:'long', weekday:'short' });
+
+    html += '<div class="econ-day-hdr">' + label + '</div>';
+
+    groups[day].forEach(function(e) {
+      var impact  = e.impact || 'Low';
+      var impCls  = IMPACT_CLS[impact]  || 'econ-low';
+      var impLbl  = IMPACT_LABEL[impact] || impact;
+      var time    = e.date ? new Date(e.date).toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' }) : '--:--';
+      var country = (e.country || '').toUpperCase();
+
+      // Tahmin / önceki değerleri formatla
+      var actual   = e.actual   != null ? String(e.actual)   : null;
+      var estimate = e.estimate != null ? String(e.estimate) : null;
+      var previous = e.previous != null ? String(e.previous) : null;
+      var unit     = e.unit || '';
+
+      var valRow = '';
+      if (actual || estimate || previous) {
+        var vals = [];
+        if (actual)   vals.push('<span class="econ-val actual">Gerçek: <strong>' + actual + unit + '</strong></span>');
+        if (estimate) vals.push('<span class="econ-val est">Tahmin: ' + estimate + unit + '</span>');
+        if (previous) vals.push('<span class="econ-val prev">Önceki: ' + previous + unit + '</span>');
+        valRow = '<div class="econ-vals">' + vals.join('') + '</div>';
+      }
+
+      html +=
+        '<div class="econ-item">' +
+          '<div class="econ-item-left">' +
+            '<span class="econ-time">' + time + '</span>' +
+            '<span class="econ-country">' + country + '</span>' +
+            '<span class="econ-impact ' + impCls + '">' + impLbl + '</span>' +
+          '</div>' +
+          '<div class="econ-item-right">' +
+            '<div class="econ-event">' + (e.event || '-') + '</div>' +
+            valRow +
+          '</div>' +
+        '</div>';
+    });
+  });
+
+  listEl.innerHTML = html;
+}
+
+function ensureEconCard() {
+  if (!document.getElementById('card-ECON')) {
+    var grid     = document.getElementById('grid');
+    var goldCard = document.getElementById('card-GOLD');
+    var econCard = makeEconSkeletonCard();
+    // Altın kartının hemen arkasına ekle
+    if (goldCard && goldCard.nextSibling) {
+      grid.insertBefore(econCard, goldCard.nextSibling);
+    } else if (goldCard) {
+      grid.appendChild(econCard);
+    } else {
+      grid.insertBefore(econCard, grid.firstChild);
+    }
+    fetchEconCalendar();
   }
 }
 
@@ -1333,17 +1510,19 @@ function renderUI() {
   document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
 
   if (has) {
-    ensureUsdTryCard(); ensureGoldCard(); ensureSortBar(); ensureExportBtn();
+    ensureUsdTryCard(); ensureGoldCard(); ensureEconCard(); ensureSortBar(); ensureExportBtn();
   } else {
     // Tüm hisseler kaldırılınca yardımcı elemanları gizle
     var sb   = document.getElementById('sort-bar');
     var eb   = document.getElementById('export-btn');
     var kur  = document.getElementById('card-USDTRY');
     var gold = document.getElementById('card-GOLD');
+    var econ = document.getElementById('card-ECON');
     if (sb)   sb.style.display   = 'none';
     if (eb)   eb.style.display   = 'none';
     if (kur)  kur.style.display  = 'none';
     if (gold) gold.style.display = 'none';
+    if (econ) econ.style.display = 'none';
   }
 
   updateSummary();

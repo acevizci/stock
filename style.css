@@ -34,6 +34,80 @@
   --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;
 }
 
+/* ── Tema geçiş animasyonu ── */
+*, *::before, *::after {
+  transition:
+    background-color .35s ease,
+    border-color     .35s ease,
+    color            .25s ease,
+    box-shadow       .35s ease;
+}
+/* Animasyon gereksiz olan elemanlar */
+canvas, svg, .live-dot, .chart-area, .skel-box {
+  transition: none !important;
+}
+
+/* ── Açık tema ── */
+body.light {
+  --bg:       #f0f4f8;
+  --surface:  #ffffff;
+  --surface2: #f1f5f9;
+  --surface3: #e2e8f0;
+  --surface4: #cbd5e1;
+
+  --border:   rgba(0,0,0,.07);
+  --border2:  rgba(0,0,0,.11);
+  --border3:  rgba(0,0,0,.18);
+
+  --text:     #0f172a;
+  --text2:    #1e293b;
+  --muted:    #64748b;
+  --muted2:   #94a3b8;
+
+  --up:       #059669;
+  --up-bg:    rgba(5,150,105,.10);
+  --up-glow:  rgba(5,150,105,.20);
+  --dn:       #dc2626;
+  --dn-bg:    rgba(220,38,38,.10);
+  --dn-glow:  rgba(220,38,38,.20);
+
+  --accent-bg:   rgba(59,130,246,.10);
+  --accent-glow: rgba(59,130,246,.18);
+  --gold-bg:     rgba(245,158,11,.10);
+  --gold-glow:   rgba(245,158,11,.20);
+}
+
+body.light {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,.05) 0%, transparent 60%),
+    linear-gradient(rgba(0,0,0,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,.025) 1px, transparent 1px);
+}
+
+/* Açık temada kart gölgesi */
+body.light .card {
+  box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+}
+body.light .card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+}
+body.light .chart-modal {
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+
+/* ── Gün bilgisi şeridi ── */
+.sun-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; font-family: var(--mono); color: var(--muted);
+  padding: 5px 10px; margin-bottom: 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r-md); letter-spacing: .02em;
+}
+.sun-bar-item { display: flex; align-items: center; gap: 4px; }
+.sun-bar-item i { font-size: 12px; }
+.sun-bar-loc { color: var(--muted2); }
+.sun-bar-sep { color: var(--border3); }
+
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 16px; scroll-behavior: smooth; }
@@ -511,6 +585,70 @@ body {
   font-size: 11px; font-family: var(--mono); color: var(--muted);
   margin-top: -4px; margin-bottom: 2px; letter-spacing: .01em;
 }
+
+/* ── Ekonomi Takvimi Kartı ── */
+.econ-card { grid-column: 1 / -1; }
+.econ-filter-wrap { display: flex; gap: 5px; }
+.econ-filter-btn {
+  padding: 4px 10px; font-size: 10px; font-weight: 700;
+  border-radius: 20px; border: 1px solid var(--border2);
+  background: var(--surface2); color: var(--muted);
+  cursor: pointer; font-family: var(--mono); transition: all .15s;
+}
+.econ-filter-btn:hover  { background: var(--surface3); color: var(--text2); }
+.econ-filter-btn.active { background: var(--surface3); color: var(--text); border-color: var(--border3); }
+.econ-list {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 10px; max-height: 340px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--surface4) transparent;
+}
+.econ-list::-webkit-scrollbar       { width: 3px; }
+.econ-list::-webkit-scrollbar-thumb { background: var(--surface4); border-radius: 3px; }
+.econ-loading { display: flex; flex-direction: column; gap: 6px; }
+.econ-empty   { font-size: 11px; color: var(--muted2); padding: 12px 0; }
+.econ-day-hdr {
+  font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); font-family: var(--mono);
+  padding: 10px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 2px;
+}
+.econ-day-hdr:first-child { padding-top: 0; }
+.econ-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+}
+.econ-item:last-child { border-bottom: none; }
+.econ-item-left {
+  display: flex; align-items: center; gap: 5px; flex-shrink: 0; min-width: 120px;
+}
+.econ-time    { font-size: 10px; font-family: var(--mono); color: var(--muted); min-width: 36px; }
+.econ-country { font-size: 9px; font-weight: 700; color: var(--muted2); font-family: var(--mono); }
+.econ-impact  {
+  font-size: 8px; font-weight: 700; padding: 2px 5px;
+  border-radius: 4px; font-family: var(--mono); letter-spacing: .04em;
+}
+.econ-high { background: var(--dn-bg);   color: var(--dn);   border: 1px solid var(--dn-glow);   }
+.econ-med  { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-glow); }
+.econ-low  { background: var(--surface3); color: var(--muted); border: 1px solid var(--border2); }
+.econ-item-right { flex: 1; min-width: 0; }
+.econ-event {
+  font-size: 11px; font-weight: 500; color: var(--text2);
+  line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.econ-vals { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 3px; }
+.econ-val  { font-size: 9px; font-family: var(--mono); color: var(--muted); }
+.econ-val.actual strong { color: var(--up); font-weight: 700; }
+.econ-val.est { color: var(--text2); }
+
+@media (max-width: 640px) {
+  .econ-item-left { min-width: 90px; }
+  .econ-country   { display: none; }
+  .econ-list      { max-height: 260px; }
+}
+@media (max-width: 480px) {
+  .econ-item { flex-direction: column; gap: 4px; }
+  .econ-item-left { min-width: 0; }
+}
+
 .sort-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin-bottom: 12px; padding: 8px 12px;
