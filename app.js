@@ -598,16 +598,20 @@ function ensureGoldCard() {
 
 // ── Ekonomi Takvimi (Madde 5) ───────────────────
 var econData     = [];
-var econFilter   = 'TR';   // 'TR' | 'ALL'
+var econFilter   = 'TR';
 var ECON_CACHE_KEY = 'econ_cache';
-var ECON_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 saat
+var ECON_CACHE_TTL = 3 * 60 * 60 * 1000; // 3 saat (FF 3 saatte bir güncellenir)
 
-// Önem seviyesi Türkçe etiketleri
 var IMPACT_LABEL = { High: 'Yüksek', Medium: 'Orta', Low: 'Düşük' };
 var IMPACT_CLS   = { High: 'econ-high', Medium: 'econ-med', Low: 'econ-low' };
 
-// TR olaylarında öne çıkan anahtar kelimeler
-var TR_KEYWORDS = ['turkey','türkiye','tcmb','tüik','tuik','cpi','ppi','gdp','rate','inflation','trade','unemployment','industrial'];
+// Forex Factory TR ilgili anahtar kelimeler (İngilizce olay adları)
+var TR_KEYWORDS = [
+  'turkey','turkish','tcmb','tuik','tüik',
+  'cpi','ppi','gdp','rate decision','inflation','trade balance',
+  'unemployment','industrial production','capacity utilization',
+  'current account','consumer confidence','manufacturing','retail sales'
+];
 
 async function fetchEconCalendar() {
   // Önbellek kontrolü
@@ -620,11 +624,8 @@ async function fetchEconCalendar() {
     }
   } catch(_) {}
 
-  // Bugün + 14 gün aralığı
-  var from = new Date();
-  var to   = new Date(Date.now() + 14 * 24 * 3600 * 1000);
-  var fmt  = function(d) { return d.toISOString().slice(0, 10); };
-  var url  = WORKER_URL + '/fmp/economic_calendar?from=' + fmt(from) + '&to=' + fmt(to);
+  // FF bu hafta + gelecek haftayı zaten döndürüyor, from/to gerekmez
+  var url = WORKER_URL + '/fmp/economic_calendar';
 
   try {
     var res = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -632,7 +633,6 @@ async function fetchEconCalendar() {
     var raw = await res.json();
     if (!Array.isArray(raw)) throw new Error('Geçersiz yanıt');
 
-    // TR filtresi: country === 'TR' veya anahtar kelime eşleşmesi
     econData = raw.filter(function(e) {
       var country = (e.country || '').toUpperCase();
       var event   = (e.event   || '').toLowerCase();
