@@ -15,7 +15,7 @@ let BIST_LIST = (() => {
 
 // ── State ──
 let stocks = [], charts = {}, histories = {}, chartRanges = {}, chartMode = {};
-let portfolioData = {}, targetData = {}, usdtryRate = null, goldData = null;
+let portfolioData = {}, targetData = {}, usdtryRate = null, goldData = null, silverData = null;
 let notesData = {}, sectorData = {};       // UV #11 & #12
 let currentSort = 'added';                 // UV #13
 let notifOn = false, toastT = null, showOnlyDiv = false;
@@ -406,7 +406,8 @@ function updateUsdTryCard() {
     }
   }
   // Kur değişince gram TRY fiyatını da yenile
-  if (typeof updateGoldCard === 'function') updateGoldCard();
+  if (typeof updateGoldCard   === 'function') updateGoldCard();
+  if (typeof updateSilverCard === 'function') updateSilverCard();
 }
 function ensureUsdTryCard() {
   if (!document.getElementById('card-USDTRY')) {
@@ -596,7 +597,154 @@ function ensureGoldCard() {
   }
 }
 
-// ── Ekonomi Takvimi (Madde 5) ───────────────────
+// ── Gümüş Kartı ─────────────────────────────────
+async function fetchSilverRate() {
+  try {
+    var data   = await fetchWithFallback('https://query1.finance.yahoo.com/v8/finance/chart/SI%3DF?interval=1d&range=1mo');
+    var result = data?.chart?.result?.[0]; if (!result) return;
+    var meta   = result.meta, priceOz = meta.regularMarketPrice; if (!priceOz) return;
+    var prev   = meta.chartPreviousClose || meta.previousClose || priceOz;
+    var q      = result.indicators?.quote?.[0] || {};
+    var closesOz = (q.close || []).filter(v => v != null);
+    var highsOz  = (q.high  || []).filter(v => v != null);
+    var lowsOz   = (q.low   || []).filter(v => v != null);
+
+    silverData = {
+      priceOz,
+      priceGram:   priceOz / TROY_OZ_TO_GRAM,
+      change:      priceOz - prev,
+      changePct:   ((priceOz - prev) / prev) * 100,
+      dayHighOz:   meta.regularMarketDayHigh  || (highsOz.length ? highsOz[highsOz.length-1] : null),
+      dayLowOz:    meta.regularMarketDayLow   || (lowsOz.length  ? lowsOz[lowsOz.length-1]  : null),
+      monthHighOz: highsOz.length ? Math.max.apply(null, highsOz) : null,
+      monthLowOz:  lowsOz.length  ? Math.min.apply(null, lowsOz)  : null,
+      weekChange:  closesOz.length >= 6
+        ? ((priceOz - closesOz[closesOz.length-6]) / closesOz[closesOz.length-6]) * 100
+        : null,
+      closesOz,
+    };
+    updateSilverCard();
+  } catch(e) { console.warn('[Gümüş]', e.message); }
+}
+
+function makeSilverSkeletonCard() {
+  var d = document.createElement('div');
+  d.className = 'card silver-card'; d.id = 'card-SILVER';
+  d.innerHTML =
+    '<div class="c-hdr">' +
+      '<div>' +
+        '<div class="c-sym"><i class="ti ti-currency-dollar" style="font-size:13px;opacity:.7"></i> Gümüş <span class="c-xch">XAG</span></div>' +
+        '<div class="c-name">Ons / Gram</div>' +
+      '</div>' +
+      '<div class="live-dot" style="flex-shrink:0;margin-top:4px;background:var(--silver);box-shadow:0 0 6px var(--silver)"></div>' +
+    '</div>' +
+    '<div class="c-price" id="silver-price"><div class="skel-box" style="width:130px;height:28px;border-radius:5px"></div></div>' +
+    '<div class="c-badges" id="silver-badges"><span class="badge loading">Yükleniyor...</span></div>' +
+    '<div class="gold-sub" id="silver-sub"></div>' +
+    '<div class="chart-area" id="chart-area-SILVER"><canvas id="cv-SILVER" aria-label="Gümüş grafik"></canvas></div>' +
+    '<div class="sep"></div>' +
+    '<div class="c-meta">' +
+      '<div class="m-col"><div class="m-lbl">Günlük Yük</div><div class="m-val" id="silver-day-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Günlük Düş</div><div class="m-val" id="silver-day-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Değişim</div><div class="m-val" id="silver-change">-</div></div>' +
+    '</div>' +
+    '<div class="sep"></div>' +
+    '<div class="c-meta">' +
+      '<div class="m-col"><div class="m-lbl">1A Yüksek</div><div class="m-val" id="silver-mo-high">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">1A Düşük</div><div class="m-val" id="silver-mo-low">-</div></div>' +
+      '<div class="m-col"><div class="m-lbl">Haftalık</div><div class="m-val" id="silver-wk-chg">-</div></div>' +
+    '</div>';
+  return d;
+}
+
+function updateSilverCard() {
+  if (!silverData) return;
+  var priceEl  = document.getElementById('silver-price');
+  var badgesEl = document.getElementById('silver-badges');
+  if (!priceEl) return;
+
+  var g    = silverData;
+  var D    = g.changePct > 0.01 ? 'up' : g.changePct < -0.01 ? 'down' : 'neutral';
+  var card = document.getElementById('card-SILVER');
+  if (card) card.className = 'card silver-card ' + D;
+
+  var elS = function(id) { return document.getElementById(id); };
+
+  var hasTry  = usdtryRate && usdtryRate.price > 0;
+  var gramTry = hasTry ? (g.priceGram * usdtryRate.price) : null;
+
+  if (gramTry != null) {
+    priceEl.textContent = gramTry.toLocaleString('tr-TR', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' TL/gr';
+    if (elS('silver-sub')) elS('silver-sub').textContent = '$' + g.priceOz.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + '/oz';
+  } else {
+    priceEl.textContent = '$' + g.priceOz.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) + '/oz';
+    if (elS('silver-sub')) elS('silver-sub').textContent = '';
+  }
+
+  if (badgesEl) {
+    var arrow  = D === 'up' ? '+' : D === 'down' ? '-' : '';
+    var chGr   = hasTry ? (g.change / TROY_OZ_TO_GRAM * usdtryRate.price) : null;
+    var amtTxt = chGr != null
+      ? (chGr >= 0 ? '+' : '') + chGr.toFixed(2) + ' TL'
+      : (g.change >= 0 ? '+$' : '-$') + Math.abs(g.change).toFixed(2);
+    badgesEl.innerHTML =
+      '<span class="badge ' + D + '">' + arrow + ' ' + Math.abs(g.changePct).toFixed(2) + '%</span>' +
+      '<span class="badge neutral kur-amt">' + amtTxt + '</span>';
+  }
+
+  var ozToGr  = function(oz) { return oz != null && hasTry ? (oz / TROY_OZ_TO_GRAM * usdtryRate.price) : null; };
+  var fmtGr   = function(v)  { return v != null ? v.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' TL' : '-'; };
+  var fmtOz   = function(v)  { return v != null ? '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '-'; };
+  var fmtVal  = hasTry ? function(oz){ return fmtGr(ozToGr(oz)); } : fmtOz;
+
+  if (elS('silver-day-high')) elS('silver-day-high').textContent = fmtVal(g.dayHighOz);
+  if (elS('silver-day-low'))  elS('silver-day-low').textContent  = fmtVal(g.dayLowOz);
+  if (elS('silver-change')) {
+    var chV   = hasTry ? (g.change / TROY_OZ_TO_GRAM * usdtryRate.price) : g.change;
+    var chTxt = hasTry ? (chV >= 0 ? '+' : '') + chV.toFixed(2) + ' TL' : (chV >= 0 ? '+$' : '-$') + Math.abs(chV).toFixed(2);
+    elS('silver-change').textContent = chTxt;
+    elS('silver-change').style.color = D === 'up' ? 'var(--up)' : D === 'down' ? 'var(--dn)' : '';
+  }
+  if (elS('silver-mo-high')) elS('silver-mo-high').textContent = fmtVal(g.monthHighOz);
+  if (elS('silver-mo-low'))  elS('silver-mo-low').textContent  = fmtVal(g.monthLowOz);
+  if (elS('silver-wk-chg') && g.weekChange != null) {
+    var wD = g.weekChange > 0 ? 'up' : g.weekChange < 0 ? 'down' : 'neutral';
+    elS('silver-wk-chg').textContent = (g.weekChange >= 0 ? '+' : '') + g.weekChange.toFixed(2) + '%';
+    elS('silver-wk-chg').style.color = wD === 'up' ? 'var(--up)' : wD === 'down' ? 'var(--dn)' : '';
+  }
+
+  var hist = g.closesOz;
+  if (hist.length) {
+    var cc = chartCol(D), cb = chartBg(D);
+    if (charts['SILVER']) {
+      var ch = charts['SILVER'];
+      ch.data.labels = hist.map(function() { return ''; });
+      ch.data.datasets[0].data = hist; ch.data.datasets[0].borderColor = cc; ch.data.datasets[0].backgroundColor = cb;
+      ch.update('none');
+    } else {
+      var ctx = document.getElementById('cv-SILVER');
+      if (ctx) {
+        charts['SILVER'] = new Chart(ctx, {
+          type: 'line',
+          data: { labels: hist.map(function(){ return ''; }), datasets: [{ data: hist, borderColor: cc, borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: cb, tension: 0.4 }] },
+          options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { display: false, grace: '8%' } } },
+        });
+      }
+    }
+  }
+}
+
+function ensureSilverCard() {
+  if (!document.getElementById('card-SILVER')) {
+    var grid     = document.getElementById('grid');
+    var goldCard = document.getElementById('card-GOLD');
+    var silvCard = makeSilverSkeletonCard();
+    if (goldCard && goldCard.nextSibling) grid.insertBefore(silvCard, goldCard.nextSibling);
+    else if (goldCard) grid.appendChild(silvCard);
+    else grid.insertBefore(silvCard, grid.firstChild);
+    fetchSilverRate();
+  }
+}
 var econData     = [];
 var econFilter   = 'TR';
 var ECON_CACHE_KEY = 'econ_cache';
@@ -1495,6 +1643,7 @@ async function refreshAll() {
   btn.disabled=true; icon.style.animation='spin 1s linear infinite';
   fetchUsdTryRate();
   fetchGoldRate();
+  fetchSilverRate();
   await Promise.all(stocks.map(async s=>{
     var old=s.data?s.data.price:null;
     var b=document.querySelector('#card-'+s.symbol+' .badge');
@@ -1515,20 +1664,23 @@ function renderUI() {
   document.getElementById('live-tag').style.display    = has ? 'flex'        : 'none';
   document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
 
+  // Market kartları her zaman görünür — hisse bağımsız
+  var kur    = document.getElementById('card-USDTRY');
+  var gold   = document.getElementById('card-GOLD');
+  var silver = document.getElementById('card-SILVER');
+  var econ   = document.getElementById('card-ECON');
+  if (kur)    kur.style.display    = '';
+  if (gold)   gold.style.display   = '';
+  if (silver) silver.style.display = '';
+  if (econ)   econ.style.display   = '';
+
   if (has) {
-    ensureUsdTryCard(); ensureGoldCard(); ensureEconCard(); ensureSortBar(); ensureExportBtn();
+    ensureSortBar(); ensureExportBtn();
   } else {
-    // Tüm hisseler kaldırılınca yardımcı elemanları gizle
-    var sb   = document.getElementById('sort-bar');
-    var eb   = document.getElementById('export-btn');
-    var kur  = document.getElementById('card-USDTRY');
-    var gold = document.getElementById('card-GOLD');
-    var econ = document.getElementById('card-ECON');
-    if (sb)   sb.style.display   = 'none';
-    if (eb)   eb.style.display   = 'none';
-    if (kur)  kur.style.display  = 'none';
-    if (gold) gold.style.display = 'none';
-    if (econ) econ.style.display = 'none';
+    var sb = document.getElementById('sort-bar');
+    var eb = document.getElementById('export-btn');
+    if (sb) sb.style.display = 'none';
+    if (eb) eb.style.display = 'none';
   }
 
   updateSummary();
@@ -1594,6 +1746,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
 // ── Başla ──
 loadPortfolio(); loadTargets(); loadNotes(); loadSectors();
 updateBellUI(); filterList(); fetchBistList();
+
+// Market kartları sayfa açılışında hemen yükle — hisse gerektirmez
+ensureUsdTryCard(); ensureGoldCard(); ensureSilverCard(); ensureEconCard();
 
 var savedStocks=localStorage.getItem('my_tracked_stocks');
 if (savedStocks) {

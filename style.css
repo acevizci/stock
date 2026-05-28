@@ -25,6 +25,9 @@
   --gold:      #f59e0b;
   --gold-bg:   rgba(245,158,11,.10);
   --gold-glow: rgba(245,158,11,.22);
+  --silver:      #94a3b8;
+  --silver-bg:   rgba(148,163,184,.10);
+  --silver-glow: rgba(148,163,184,.22);
   --accent2:   #6366f1;
   --accent-bg: rgba(59,130,246,.10);
   --accent-glow: rgba(59,130,246,.20);
@@ -586,7 +589,14 @@ body {
   margin-top: -4px; margin-bottom: 2px; letter-spacing: .01em;
 }
 
-/* ── Ekonomi Takvimi Kartı ── */
+/* ── Gümüş kartı ── */
+.silver-card { border-color: rgba(148,163,184,.22); }
+.silver-card::before { background: linear-gradient(90deg, transparent, var(--silver-glow), transparent); }
+.silver-card::after  { background: radial-gradient(circle, var(--silver-glow), transparent 70%); }
+.silver-card.up::before    { background: linear-gradient(90deg, transparent, var(--up-glow), transparent); }
+.silver-card.up::after     { background: radial-gradient(circle, var(--up-glow), transparent 70%); }
+.silver-card.down::before  { background: linear-gradient(90deg, transparent, var(--dn-glow), transparent); }
+.silver-card.down::after   { background: radial-gradient(circle, var(--dn-glow), transparent 70%); }
 .econ-card { grid-column: 1 / -1; }
 .econ-filter-wrap { display: flex; gap: 5px; }
 .econ-filter-btn {
