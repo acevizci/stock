@@ -605,9 +605,13 @@ var ECON_CACHE_TTL = 3 * 60 * 60 * 1000; // 3 saat (FF 3 saatte bir güncellenir
 var IMPACT_LABEL = { High: 'Yüksek', Medium: 'Orta', Low: 'Düşük' };
 var IMPACT_CLS   = { High: 'econ-high', Medium: 'econ-med', Low: 'econ-low' };
 
-// Forex Factory TR ilgili anahtar kelimeler (İngilizce olay adları)
+// TR filtresi: sadece ülke kodu TR — anahtar kelime eşleşmesi "Tümü" moduna bırakıldı
 var TR_KEYWORDS = [
   'turkey','turkish','tcmb','tuik','tüik',
+];
+
+// Yüksek önem filtresi için kullanılan genel kelimeler (sadece referans)
+var GLOBAL_KEYWORDS = [
   'cpi','ppi','gdp','rate decision','inflation','trade balance',
   'unemployment','industrial production','capacity utilization',
   'current account','consumer confidence','manufacturing','retail sales'
@@ -676,12 +680,17 @@ function renderEconCard() {
     ? econData.filter(function(e) {
         var country = (e.country || '').toUpperCase();
         var event   = (e.event   || '').toLowerCase();
-        return country === 'TR' || TR_KEYWORDS.some(function(kw){ return event.includes(kw); });
+        // Sadece Türkiye olayları veya açık TR anahtar kelimeleri (tcmb, tuik vb.)
+        return country === 'TR' ||
+               TR_KEYWORDS.some(function(kw){ return event.includes(kw); });
       })
-    : econData;
+    : econData.slice(); // Tümü — tüm ülkeler, yüksek önem önce
 
   if (!items.length) {
-    listEl.innerHTML = '<div class="econ-empty">Yaklaşan ekonomik olay bulunamadı.</div>';
+    var msg = econFilter === 'TR'
+      ? 'Bu hafta Türkiye için ekonomik olay bulunamadı.<br><span style="color:var(--muted2)">Tümü seçeneğiyle global takvimi görebilirsiniz.</span>'
+      : 'Yaklaşan ekonomik olay bulunamadı.';
+    listEl.innerHTML = '<div class="econ-empty">' + msg + '</div>';
     return;
   }
 
@@ -693,7 +702,19 @@ function renderEconCard() {
     groups[day].push(e);
   });
 
-  var today    = new Date().toISOString().slice(0, 10);
+  // Sıralama: TR modunda sadece tarihe göre; Tümü modunda önce yüksek önem sonra tarih
+  var impOrder = { High: 0, Medium: 1, Low: 2 };
+  items.sort(function(a, b) {
+    var dateDiff = new Date(a.date) - new Date(b.date);
+    if (econFilter === 'ALL') {
+      var impDiff = (impOrder[a.impact] || 2) - (impOrder[b.impact] || 2);
+      // Aynı gündeki olayları önem sırasına göre; farklı günleri tarihe göre
+      var dayA = (a.date || '').slice(0, 10), dayB = (b.date || '').slice(0, 10);
+      if (dayA !== dayB) return dateDiff;
+      return impDiff;
+    }
+    return dateDiff;
+  });
   var tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
   var html = '';
