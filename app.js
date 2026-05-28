@@ -205,8 +205,29 @@ function calcRSI(closes, period) {
 }
 
 // ── Bildirim ──
+// ── Tema ──
+function applyTheme(theme) {
+  document.body.classList.toggle('light', theme === 'light');
+  var icon = document.getElementById('theme-icon');
+  if (icon) {
+    icon.className = theme === 'light' ? 'ti ti-moon' : 'ti ti-sun';
+  }
+  localStorage.setItem('theme', theme);
+}
+
+function toggleTheme() {
+  var current = document.body.classList.contains('light') ? 'light' : 'dark';
+  applyTheme(current === 'light' ? 'dark' : 'light');
+}
+
+// Sayfa yüklenince kayıtlı temayı uygula
+(function() {
+  var saved = localStorage.getItem('theme');
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(saved || (prefersDark ? 'dark' : 'light'));
+})();
+
 function updateBellUI() {
-  const b = document.getElementById('bell-btn');
   if (!('Notification' in window)) { b.style.opacity='.3'; b.style.pointerEvents='none'; return; }
   b.className='btn btn-icon btn-bell'+(Notification.permission==='denied'?' denied':notifOn?' on':'');
   b.title=notifOn?'Bildirimleri kapat':Notification.permission==='denied'?'Tarayıcıdan izin ver':'Bildirime izin ver';
