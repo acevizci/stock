@@ -694,28 +694,26 @@ function renderEconCard() {
     return;
   }
 
-  // Tarihe göre grupla
+  // today / tomorrow — gruplama etiketleri için
+  var today    = new Date().toISOString().slice(0, 10);
+  var tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  // Sıralama: aynı gün içinde önem sırasına göre, günler arası tarihe göre
+  var impOrder = { High: 0, Medium: 1, Low: 2 };
+  items.sort(function(a, b) {
+    var dayA = (a.date || '').slice(0, 10), dayB = (b.date || '').slice(0, 10);
+    if (dayA !== dayB) return new Date(a.date) - new Date(b.date);
+    if (econFilter === 'ALL') return (impOrder[a.impact] || 2) - (impOrder[b.impact] || 2);
+    return 0;
+  });
+
+  // Sıralama sonrası tarihe göre grupla
   var groups = {};
   items.forEach(function(e) {
-    var day = (e.date || '').slice(0, 10); // YYYY-MM-DD
+    var day = (e.date || '').slice(0, 10);
     if (!groups[day]) groups[day] = [];
     groups[day].push(e);
   });
-
-  // Sıralama: TR modunda sadece tarihe göre; Tümü modunda önce yüksek önem sonra tarih
-  var impOrder = { High: 0, Medium: 1, Low: 2 };
-  items.sort(function(a, b) {
-    var dateDiff = new Date(a.date) - new Date(b.date);
-    if (econFilter === 'ALL') {
-      var impDiff = (impOrder[a.impact] || 2) - (impOrder[b.impact] || 2);
-      // Aynı gündeki olayları önem sırasına göre; farklı günleri tarihe göre
-      var dayA = (a.date || '').slice(0, 10), dayB = (b.date || '').slice(0, 10);
-      if (dayA !== dayB) return dateDiff;
-      return impDiff;
-    }
-    return dateDiff;
-  });
-  var tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
   var html = '';
   Object.keys(groups).sort().forEach(function(day) {
