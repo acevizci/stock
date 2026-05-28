@@ -33,6 +33,9 @@
       <button class="btn btn-icon btn-bell" id="bell-btn" onclick="toggleNotif()" title="Düşüş bildirimleri">
         <i class="ti ti-bell"></i>
       </button>
+      <button class="btn btn-icon" id="theme-btn" onclick="toggleTheme()" title="Tema değiştir">
+        <i class="ti ti-sun" id="theme-icon"></i>
+      </button>
       <button class="btn" id="ref-btn" onclick="refreshAll()" style="display:none">
         <i class="ti ti-refresh" id="ref-icon"></i> Yenile
       </button>
@@ -66,6 +69,12 @@
     <div class="empty-t">Takip listesi boş</div>
     <div class="empty-s">Hisse Ekle butonuyla<br>takip başlatabilirsin.</div>
   </div>
+
+  <!-- Market kartları: USD / Altın / Gümüş yanyana -->
+  <div class="market-row" id="market-row"></div>
+
+  <!-- Ekonomi takvimi: tam genişlik -->
+  <div class="econ-row" id="econ-row"></div>
 
   <!-- Stock grid -->
   <div class="grid" id="grid"></div>

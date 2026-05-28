@@ -597,7 +597,23 @@ body {
 .silver-card.up::after     { background: radial-gradient(circle, var(--up-glow), transparent 70%); }
 .silver-card.down::before  { background: linear-gradient(90deg, transparent, var(--dn-glow), transparent); }
 .silver-card.down::after   { background: radial-gradient(circle, var(--dn-glow), transparent 70%); }
-.econ-card { grid-column: 1 / -1; }
+/* ── Market satırı: USD / Altın / Gümüş yanyana ── */
+.market-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.econ-row { margin-bottom: var(--gap); }
+
+@media (max-width: 700px) {
+  .market-row { grid-template-columns: 1fr; }
+}
+@media (min-width: 701px) and (max-width: 960px) {
+  .market-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+.econ-card { grid-column: unset; }
 .econ-filter-wrap { display: flex; gap: 5px; }
 .econ-filter-btn {
   padding: 4px 10px; font-size: 10px; font-weight: 700;

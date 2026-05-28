@@ -411,7 +411,8 @@ function updateUsdTryCard() {
 }
 function ensureUsdTryCard() {
   if (!document.getElementById('card-USDTRY')) {
-    var grid=document.getElementById('grid'); grid.insertBefore(makeUsdTrySkeletonCard(),grid.firstChild); fetchUsdTryRate();
+    document.getElementById('market-row').appendChild(makeUsdTrySkeletonCard());
+    fetchUsdTryRate();
   }
 }
 
@@ -585,14 +586,7 @@ function updateGoldCard() {
 
 function ensureGoldCard() {
   if (!document.getElementById('card-GOLD')) {
-    var grid = document.getElementById('grid');
-    var kurCard = document.getElementById('card-USDTRY');
-    var goldCard = makeGoldSkeletonCard();
-    if (kurCard && kurCard.nextSibling) {
-      grid.insertBefore(goldCard, kurCard.nextSibling);
-    } else {
-      grid.insertBefore(goldCard, grid.firstChild);
-    }
+    document.getElementById('market-row').appendChild(makeGoldSkeletonCard());
     fetchGoldRate();
   }
 }
@@ -736,12 +730,7 @@ function updateSilverCard() {
 
 function ensureSilverCard() {
   if (!document.getElementById('card-SILVER')) {
-    var grid     = document.getElementById('grid');
-    var goldCard = document.getElementById('card-GOLD');
-    var silvCard = makeSilverSkeletonCard();
-    if (goldCard && goldCard.nextSibling) grid.insertBefore(silvCard, goldCard.nextSibling);
-    else if (goldCard) grid.appendChild(silvCard);
-    else grid.insertBefore(silvCard, grid.firstChild);
+    document.getElementById('market-row').appendChild(makeSilverSkeletonCard());
     fetchSilverRate();
   }
 }
@@ -913,17 +902,7 @@ function renderEconCard() {
 
 function ensureEconCard() {
   if (!document.getElementById('card-ECON')) {
-    var grid     = document.getElementById('grid');
-    var goldCard = document.getElementById('card-GOLD');
-    var econCard = makeEconSkeletonCard();
-    // Altın kartının hemen arkasına ekle
-    if (goldCard && goldCard.nextSibling) {
-      grid.insertBefore(econCard, goldCard.nextSibling);
-    } else if (goldCard) {
-      grid.appendChild(econCard);
-    } else {
-      grid.insertBefore(econCard, grid.firstChild);
-    }
+    document.getElementById('econ-row').appendChild(makeEconSkeletonCard());
     fetchEconCalendar();
   }
 }
@@ -1326,7 +1305,6 @@ function applySort() {
   else if (currentSort==='vol')         sorted.sort((a,b)=>(b.data?b.data.volume:0)-(a.data?a.data.volume:0));
   else if (currentSort==='mcap')        sorted.sort((a,b)=>(b.data?b.data.marketCap:0)-(a.data?a.data.marketCap:0));
   sorted.forEach(s=>{ var c=document.getElementById('card-'+s.symbol); if(c) grid.appendChild(c); });
-  var kur=document.getElementById('card-USDTRY'); if (kur) grid.insertBefore(kur,grid.firstChild);
 }
 
 // ── CSV Dışa Aktarma (UV #14) ──
@@ -1663,16 +1641,6 @@ function renderUI() {
   document.getElementById('sbar').style.display        = has ? 'grid'        : 'none';
   document.getElementById('live-tag').style.display    = has ? 'flex'        : 'none';
   document.getElementById('ref-btn').style.display     = has ? 'inline-flex' : 'none';
-
-  // Market kartları her zaman görünür — hisse bağımsız
-  var kur    = document.getElementById('card-USDTRY');
-  var gold   = document.getElementById('card-GOLD');
-  var silver = document.getElementById('card-SILVER');
-  var econ   = document.getElementById('card-ECON');
-  if (kur)    kur.style.display    = '';
-  if (gold)   gold.style.display   = '';
-  if (silver) silver.style.display = '';
-  if (econ)   econ.style.display   = '';
 
   if (has) {
     ensureSortBar(); ensureExportBtn();
