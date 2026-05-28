@@ -228,6 +228,7 @@ function toggleTheme() {
 })();
 
 function updateBellUI() {
+  const b = document.getElementById('bell-btn');
   if (!('Notification' in window)) { b.style.opacity='.3'; b.style.pointerEvents='none'; return; }
   b.className='btn btn-icon btn-bell'+(Notification.permission==='denied'?' denied':notifOn?' on':'');
   b.title=notifOn?'Bildirimleri kapat':Notification.permission==='denied'?'Tarayıcıdan izin ver':'Bildirime izin ver';
