@@ -614,46 +614,21 @@ var TR_KEYWORDS = [
 ];
 
 async function fetchEconCalendar() {
-  // Önbellek kontrolü
   try {
     var cached = JSON.parse(localStorage.getItem(ECON_CACHE_KEY) || 'null');
     if (cached && Date.now() - cached.ts < ECON_CACHE_TTL && cached.data.length > 0) {
-      econData = cached.data; renderEconCard(); return; // tüm veri yüklendi, filtre renderEconCard'da
+      econData = cached.data; renderEconCard(); return;
     }
   } catch(_) {}
 
-  // Forex Factory — browser'dan direkt çek (CDN CORS izni veriyor, worker gereksiz)
-  var FF_THIS = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json?version=1';
-  var FF_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json?version=1';
-
   try {
-    var results = await Promise.all([
-      fetch(FF_THIS, { signal: AbortSignal.timeout(10000) }).then(function(r){ return r.ok ? r.json() : []; }),
-      fetch(FF_NEXT, { signal: AbortSignal.timeout(10000) }).then(function(r){ return r.ok ? r.json() : []; }),
-    ]);
-    var raw = [].concat(results[0] || [], results[1] || []);
-    if (!raw.length) throw new Error('Boş yanıt');
+    var res = await fetch(WORKER_URL + '/fmp/economic_calendar', { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var raw = await res.json();
+    if (!Array.isArray(raw)) throw new Error('Geçersiz yanıt');
 
-    // FF formatını normalize et
-    var normalized = raw.map(function(e) {
-      return {
-        date:     e.date,
-        country:  (e.country || '').toUpperCase(),
-        event:    e.title || e.name || '',
-        impact:   e.impact === 'High' ? 'High' : e.impact === 'Medium' ? 'Medium' : 'Low',
-        actual:   e.actual   || null,
-        estimate: e.forecast || null,
-        previous: e.previous || null,
-      };
-    });
-
-    econData = normalized.filter(function(e) {
-      var country = e.country;
-      var event   = e.event.toLowerCase();
-      return country === 'TR' || TR_KEYWORDS.some(function(kw){ return event.includes(kw); });
-    }).sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
-
-    localStorage.setItem(ECON_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: normalized }));
+    econData = raw; // tüm veriyi sakla, filtre renderEconCard'da uygulanır
+    localStorage.setItem(ECON_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: econData }));
     renderEconCard();
   } catch(e) {
     console.warn('[EkonomiTakvim]', e.message);
