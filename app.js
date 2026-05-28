@@ -618,34 +618,45 @@ async function fetchEconCalendar() {
   try {
     var cached = JSON.parse(localStorage.getItem(ECON_CACHE_KEY) || 'null');
     if (cached && Date.now() - cached.ts < ECON_CACHE_TTL && cached.data.length > 0) {
-      econData = cached.data;
-      renderEconCard();
-      return;
+      econData = cached.data; renderEconCard(); return; // tüm veri yüklendi, filtre renderEconCard'da
     }
   } catch(_) {}
 
-  // FF bu hafta + gelecek haftayı zaten döndürüyor, from/to gerekmez
-  var url = WORKER_URL + '/fmp/economic_calendar';
+  // Forex Factory — browser'dan direkt çek (CDN CORS izni veriyor, worker gereksiz)
+  var FF_THIS = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json?version=1';
+  var FF_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json?version=1';
 
   try {
-    var res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var raw = await res.json();
-    if (!Array.isArray(raw)) throw new Error('Geçersiz yanıt');
+    var results = await Promise.all([
+      fetch(FF_THIS, { signal: AbortSignal.timeout(10000) }).then(function(r){ return r.ok ? r.json() : []; }),
+      fetch(FF_NEXT, { signal: AbortSignal.timeout(10000) }).then(function(r){ return r.ok ? r.json() : []; }),
+    ]);
+    var raw = [].concat(results[0] || [], results[1] || []);
+    if (!raw.length) throw new Error('Boş yanıt');
 
-    econData = raw.filter(function(e) {
-      var country = (e.country || '').toUpperCase();
-      var event   = (e.event   || '').toLowerCase();
-      return country === 'TR' ||
-             TR_KEYWORDS.some(function(kw) { return event.includes(kw); });
-    }).sort(function(a, b) { return new Date(a.date) - new Date(b.date); });
+    // FF formatını normalize et
+    var normalized = raw.map(function(e) {
+      return {
+        date:     e.date,
+        country:  (e.country || '').toUpperCase(),
+        event:    e.title || e.name || '',
+        impact:   e.impact === 'High' ? 'High' : e.impact === 'Medium' ? 'Medium' : 'Low',
+        actual:   e.actual   || null,
+        estimate: e.forecast || null,
+        previous: e.previous || null,
+      };
+    });
 
-    // Önbelleğe kaydet
-    localStorage.setItem(ECON_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: econData }));
+    econData = normalized.filter(function(e) {
+      var country = e.country;
+      var event   = e.event.toLowerCase();
+      return country === 'TR' || TR_KEYWORDS.some(function(kw){ return event.includes(kw); });
+    }).sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+
+    localStorage.setItem(ECON_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: normalized }));
     renderEconCard();
   } catch(e) {
     console.warn('[EkonomiTakvim]', e.message);
-    // Önbellekte eski veri varsa onu kullan
     try {
       var old = JSON.parse(localStorage.getItem(ECON_CACHE_KEY) || 'null');
       if (old && old.data.length > 0) { econData = old.data; renderEconCard(); }
@@ -685,6 +696,7 @@ function setEconFilter(f) {
 function renderEconCard() {
   var listEl = document.getElementById('econ-list'); if (!listEl) return;
 
+  // econData tüm ülkeleri içeriyor; filtre render anında uygulanır
   var items = econFilter === 'TR'
     ? econData.filter(function(e) {
         var country = (e.country || '').toUpperCase();
